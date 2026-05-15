@@ -1,0 +1,311 @@
+<!-- templates/base.html -->
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Knowledge Exchange{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome 6 (бесплатные иконки) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        /* Кастомные стили для древовидных комментариев / подсветки */
+        .comment-tree {
+            margin-left: 1.5rem;
+            border-left: 2px solid #e5e7eb;
+            padding-left: 1rem;
+        }
+        .hover-bg:hover {
+            background-color: #f9fafb;
+        }
+        /* Плавные переходы */
+        .transition-smooth {
+            transition: all 0.2s ease;
+        }
+
+        .dropdown {
+            position: relative;
+            display: inline-block;
+        }
+
+        .dropdown-menu {
+            position: absolute;
+            right: 0;
+            top: 100%;
+            margin-top: 0.5rem;
+            background-color: white;
+            border-radius: 0.5rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            min-width: 200px;
+            z-index: 50;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(-10px);
+            transition: all 0.2s ease;
+        }
+
+        .dropdown.active .dropdown-menu {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+
+        /* Затемнение фона для модальных окон */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background-color: white;
+            border-radius: 0.75rem;
+            max-width: 500px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+    </style>
+    {% block extra_css %}{% endblock %}
+</head>
+<body class="bg-gray-50 font-sans antialiased">
+
+    <!--  ХЕДЕР  -->
+    <header class="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-50">
+        <div class="container mx-auto px-4 py-3 flex flex-wrap items-center justify-between">
+            <!-- Логотип / Бренд -->
+            <div class="flex items-center space-x-2">
+                <i class="fas fa-chalkboard-user text-indigo-600 text-2xl"></i>
+                <a href="/" class="text-xl font-bold text-gray-800 hover:text-indigo-600">QArticle</a>
+            </div>
+
+            <!-- Поисковая строка (центр) -->
+            <div class="flex-1 max-w-xl mx-4">
+                <div class="relative">
+                    <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                    <input type="text" placeholder="Поиск статей, вопросов, авторов..."
+                           class="w-full pl-10 pr-4 py-2 rounded-full border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                </div>
+            </div>
+
+            <!-- Навигация пользователя -->
+            <div class="flex items-center space-x-4">
+                <!-- Уведомления (выпадашка) -->
+                <div class="relative">
+                    <button class="text-gray-600 hover:text-indigo-600 transition">
+                        <i class="far fa-bell text-xl"></i>
+                        <span class="absolute -top-1 -right-2 bg-red-500 text-white text-xs rounded-full px-1">3</span>
+                    </button>
+                </div>
+                <!-- Создать пост -->
+                <a href="/create" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-full text-sm font-medium transition">
+                    <i class="fas fa-plus mr-1"></i> Создать
+                </a>
+
+                                <!-- Профиль / Вход / Регистрация -->
+                {% if current_user.is_authenticated %}
+                <div class="dropdown" id="userDropdown">
+                    <button onclick="toggleDropdown()" class="flex items-center space-x-1 focus:outline-none hover:bg-gray-50 px-2 py-1 rounded-lg transition">
+                        <img src="{{ current_user.avatar_url if current_user.avatar_url else 'https://randomuser.me/api/portraits/men/32.jpg' }}"
+                             alt="avatar" class="w-8 h-8 rounded-full border border-gray-300">
+                        <i class="fas fa-chevron-down text-xs text-gray-500"></i>
+                    </button>
+                    <div class="dropdown-menu">
+                        <div class="py-1">
+                            <div class="px-4 py-2 border-b border-gray-100">
+                                <p class="text-sm font-medium text-gray-900">{{ current_user.username }}</p>
+                                <p class="text-xs text-gray-500">{{ current_user.email }}</p>
+                            </div>
+                            <a href="{{ url_for('profile') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition">
+                                <i class="fas fa-user-circle mr-2"></i> Мой профиль
+                            </a>
+                            <a href="#" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition">
+                                <i class="fas fa-cog mr-2"></i> Настройки
+                            </a>
+                            <a href="#" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition">
+                                <i class="fas fa-bookmark mr-2"></i> Закладки
+                            </a>
+                            <div class="border-t border-gray-100 my-1"></div>
+                            <a href="{{ url_for('logout') }}" class="block px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition">
+                                <i class="fas fa-sign-out-alt mr-2"></i> Выйти
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="flex space-x-2">
+                    <a href="{{ url_for('login') }}" class="text-indigo-600 hover:text-indigo-800 px-3 py-1 transition">Вход</a>
+                    <a href="{{ url_for('register') }}" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-full text-sm transition">Регистрация</a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- навигация по типам контента -->
+        <div class="bg-gray-50 border-t border-gray-200 py-2">
+            <div class="container mx-auto px-4 flex flex-wrap gap-4 text-sm">
+                <a href="/" class="font-semibold text-indigo-600 border-b-2 border-indigo-600 pb-1">Лента</a>
+                <a href="/articles" class="text-gray-600 hover:text-gray-900">Статьи</a>
+                <a href="/questions" class="text-gray-600 hover:text-gray-900">Вопросы</a>
+                <a href="/groups" class="text-gray-600 hover:text-gray-900">Сообщества</a>
+                <a href="/top" class="text-gray-600 hover:text-gray-900">Топ недели</a>
+            </div>
+        </div>
+    </header>
+
+    <!--  ОСНОВНОЙ КОНТЕНТ -->
+    <main class="container mx-auto px-4 py-6">
+        <div class="flex flex-col lg:flex-row gap-6">
+            <!-- ЛЕВАЯ САЙДБАР (группы, теги, рекомендации) -->
+            <aside class="lg:w-1/4 space-y-6">
+                <!-- Мои сообщества -->
+                <div class="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
+                    <h3 class="font-semibold text-gray-800 flex items-center gap-2 mb-3">
+                        <i class="fas fa-users text-indigo-500"></i> Мои группы
+                    </h3>
+                    <ul class="space-y-2 text-sm">
+                        <li><a href="/group/python-data" class="flex justify-between hover:text-indigo-600"><span>🐍 Python для Data Science</span><span class="text-gray-400">12 нов.</span></a></li>
+                        <li><a href="/group/frontend" class="flex justify-between hover:text-indigo-600"><span>⚛️ Frontend Craft</span><span class="text-gray-400">4 нов.</span></a></li>
+                        <li><a href="/group/devops" class="flex justify-between hover:text-indigo-600"><span>🐳 DevOps & Cloud</span><span class="text-gray-400">2 нов.</span></a></li>
+                    </ul>
+                    <a href="/groups/explore" class="text-indigo-500 text-xs mt-2 inline-block">+ Исследовать сообщества</a>
+                </div>
+
+                <!-- Популярные теги -->
+                <div class="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
+                    <h3 class="font-semibold text-gray-800 flex items-center gap-2 mb-3">
+                        <i class="fas fa-tags text-indigo-500"></i> Трендовые теги
+                    </h3>
+                    <div class="flex flex-wrap gap-2">
+                        <a href="#" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded-full text-xs">#машинное_обучение</a>
+                        <a href="#" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded-full text-xs">#pandas</a>
+                        <a href="#" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded-full text-xs">#sql</a>
+                        <a href="#" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded-full text-xs">#docker</a>
+                        <a href="#" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded-full text-xs">#react</a>
+                    </div>
+                </div>
+
+                <!-- From the Archives  -->
+                <div class="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
+                    <h3 class="font-semibold text-gray-800 flex items-center gap-2 mb-2">
+                        <i class="fas fa-archive text-indigo-500"></i> Из архивов
+                    </h3>
+                    <a href="#" class="block text-sm text-indigo-700 hover:underline">Почему B-деревья оптимальны для СУБД?</a>
+                    <p class="text-xs text-gray-400 mt-1">⭐ 245 • 2 года назад</p>
+                </div>
+            </aside>
+
+            <!-- ЦЕНТРАЛЬНЫЙ КОНТЕНТ (то, что будет переопределяться) -->
+            <div class="lg:w-2/3">
+                {% block content %}
+                <!-- Содержимое страницы ...-->
+                {% endblock %}
+            </div>
+
+            <!-- ПРАВАЯ САЙДБАР (уведомления, топ пользователей) -->
+            <aside class="lg:w-1/4 space-y-6">
+                <!-- Уведомления активности -->
+                <div class="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
+                    <h3 class="font-semibold text-gray-800 flex items-center gap-2 mb-3">
+                        <i class="fas fa-bell text-indigo-500"></i> Активность
+                    </h3>
+                    <div class="space-y-3 text-sm">
+                        <div class="flex gap-2">
+                            <img src="https://randomuser.me/api/portraits/women/68.jpg" class="w-6 h-6 rounded-full">
+                            <div><a href="#" class="font-medium">anna_ml</a> ответила на ваш вопрос о регуляризации</div>
+                        </div>
+                        <div class="flex gap-2">
+                            <i class="fas fa-comment-dots text-indigo-400"></i>
+                            <div><a href="#" class="font-medium">Статья «Индексы в PostgreSQL»</a> получила 5 новых комментариев</div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Лидерборд внутри группы пример -->
+                <div class="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
+                    <h3 class="font-semibold text-gray-800 flex items-center gap-2 mb-2">
+                        <i class="fas fa-trophy text-yellow-500"></i> Лучшие в Python DS
+                    </h3>
+                    <ul class="text-sm space-y-1">
+                        <li>1. <span class="font-medium">ivan_ds</span> — 1245 реп.</li>
+                        <li>2. <span class="font-medium">data_olga</span> — 980 реп.</li>
+                        <li>3. <span class="font-medium">alex_ml</span> — 742 реп.</li>
+                    </ul>
+                </div>
+            </aside>
+        </div>
+    </main>
+
+    <!--  ФУТЕР  -->
+    <footer class="bg-white border-t border-gray-200 mt-12 py-6">
+        <div class="container mx-auto px-4 text-center text-sm text-gray-500">
+            &copy; 2025 KnowFlow — платформа совместного обучения. <a href="#" class="text-indigo-500">О проекте</a> | <a href="#" class="text-indigo-500">Правила</a>
+        </div>
+    </footer>
+
+     <script>
+        // для переключения выпадающего меню
+        function toggleDropdown() {
+            const dropdown = document.getElementById('userDropdown');
+            dropdown.classList.toggle('active');
+        }
+
+        // Закрытие меню при клике вне его
+        document.addEventListener('click', function(event) {
+            const dropdown = document.getElementById('userDropdown');
+            if (!dropdown) return;
+
+            const isClickInside = dropdown.contains(event.target);
+            if (!isClickInside && dropdown.classList.contains('active')) {
+                dropdown.classList.remove('active');
+            }
+        });
+
+        // Функции для модального окна выхода
+        function showLogoutModal() {
+            const modal = document.getElementById('logoutModal');
+            if (modal) {
+                modal.classList.add('active');
+            }
+        }
+
+        function closeLogoutModal() {
+            const modal = document.getElementById('logoutModal');
+            if (modal) {
+                modal.classList.remove('active');
+            }
+        }
+
+        /*
+        document.addEventListener('DOMContentLoaded', function() {
+            const logoutLink = document.querySelector('.dropdown-menu a[href*="logout"]');
+            if (logoutLink) {
+                logoutLink.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    showLogoutModal();
+                });
+            }
+        }); */
+         document.addEventListener('DOMContentLoaded', function() {
+        const logoutLinks = document.querySelectorAll('a[href*="logout"]');
+        logoutLinks.forEach(function(link) {
+            console.log('Найдена ссылка выхода:', link);
+            link.addEventListener('click', function(e) {
+                console.log('Клик по ссылке выхода');
+            });
+        });
+    });
+    </script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

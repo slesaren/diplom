@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+
+{% block title %}Главная — LearnTogether{% endblock %}
+
+{% block content %}
+<div class="flex flex-col lg:flex-row gap-8">
+    <!-- Левая колонка: Лента постов (статьи + вопросы) -->
+    <div class="lg:w-2/3">
+        <!-- Переключатель типов контента -->
+        <div class="bg-white rounded-xl shadow-sm p-1 flex space-x-1 mb-6 w-fit">
+            <button class="px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white">Всё</button>
+            <button class="px-4 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-100">Статьи</button>
+            <button class="px-4 py-2 rounded-lg text-sm text-gray-600 hover:bg-gray-100">Вопросы</button>
+        </div>
+
+        <!-- Карточка поста (статья) -->
+        <article class="bg-white rounded-xl shadow-sm p-5 mb-5 transition-smooth hover:shadow-md">
+            <div class="flex items-start justify-between">
+                <div class="flex items-center space-x-2 text-sm text-gray-500">
+                    <img src="https://randomuser.me/api/portraits/men/32.jpg" class="w-6 h-6 rounded-full">
+                    <span class="font-medium text-gray-800">Дмитрий Петров</span>
+                    <span>·</span>
+                    <span><i class="far fa-clock"></i> 2 часа назад</span>
+                    <span class="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-full">Статья</span>
+                </div>
+                <i class="fas fa-bookmark text-gray-300 hover:text-yellow-400 cursor-pointer"></i>
+            </div>
+            <h2 class="text-xl font-bold mt-3 mb-2 hover:text-blue-600 cursor-pointer">
+                Введение в индексы PostgreSQL: B-tree и не только
+            </h2>
+            <p class="text-gray-600 mb-3">Разбираем, как работают B-tree индексы, когда они эффективны, а когда лучше выбрать GIN или BRIN. Примеры запросов и explain analyze...</p>
+            <!-- Иллюстрация привязки контекстного вопроса: абзац с кнопкой -->
+            <div class="bg-gray-50 p-3 rounded-lg border-l-4 border-blue-300 my-3 text-sm italic text-gray-700">
+                «Чем B-tree отличается от хеш-индекса в PostgreSQL?»
+                <button class="dnu-btn ml-3 text-xs bg-gray-200 hover:bg-gray-300 rounded-full px-2 py-1"><i class="fas fa-question-circle"></i> Непонятно</button>
+            </div>
+            <div class="flex flex-wrap items-center justify-between mt-4">
+                <div class="flex items-center space-x-4">
+                    <button class="vote-btn flex items-center space-x-1 text-gray-500 hover:text-blue-600">
+                        <i class="far fa-thumbs-up"></i>
+                        <span class="vote-count">24</span>
+                    </button>
+                    <button class="flex items-center space-x-1 text-gray-500">
+                        <i class="far fa-comment"></i>
+                        <span>7</span>
+                    </button>
+                    <button class="flex items-center space-x-1 text-gray-500">
+                        <i class="fas fa-share-alt"></i>
+                    </button>
+                </div>
+                <div class="flex flex-wrap gap-1">
+                    <span class="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded-full">#postgresql</span>
+                    <span class="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded-full">#базы_данных</span>
+                    <span class="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded-full">#индексы</span>
+                </div>
+            </div>
+            <!-- Пример древовидного комментария  -->
+            <div class="mt-4 pt-3 border-t">
+                <div class="flex items-start space-x-2 text-sm">
+                    <img src="https://randomuser.me/api/portraits/women/45.jpg" class="w-5 h-5 rounded-full mt-0.5">
+                    <div class="flex-1">
+                        <span class="font-semibold">Елена Смирнова</span>
+                        <span class="text-xs text-gray-400 ml-2">1 час назад</span>
+                        <p class="text-gray-700">А для больших текстовых полей какой индекс лучше?</p>
+                        <button class="text-xs text-blue-500 mt-1">Ответить</button>
+                    </div>
+                </div>
+            </div>
+        </article>
+
+        <!-- Карточка поста вопрос -->
+        <article class="bg-white rounded-xl shadow-sm p-5 mb-5">
+            <div class="flex items-start justify-between">
+                <div class="flex items-center space-x-2 text-sm text-gray-500">
+                    <img src="https://randomuser.me/api/portraits/men/21.jpg" class="w-6 h-6 rounded-full">
+                    <span class="font-medium text-gray-800">Максим Орлов</span>
+                    <span>·</span>
+                    <span><i class="far fa-clock"></i> 5 часов назад</span>
+                    <span class="bg-green-100 text-green-700 text-xs px-2 py-0.5 rounded-full">Вопрос</span>
+                </div>
+                <i class="far fa-bookmark text-gray-300"></i>
+            </div>
+            <h2 class="text-xl font-bold mt-3 mb-2">Как оптимизировать JOIN трёх таблиц с большим объёмом данных?</h2>
+            <p class="text-gray-600">Использую PostgreSQL, таблицы по 2 млн строк. JOIN выполняется 8 секунд, explain говорит о seq scan. Пробовал индексы — не помогло...</p>
+            <div class="flex flex-wrap items-center justify-between mt-4">
+                <div class="flex items-center space-x-4">
+                    <button class="vote-btn flex items-center space-x-1 text-gray-500"><i class="far fa-thumbs-up"></i><span class="vote-count">12</span></button>
+                    <button class="flex items-center space-x-1 text-gray-500"><i class="far fa-comment"></i><span>4</span></button>
+                </div>
+                <div class="flex flex-wrap gap-1">
+                    <span class="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded-full">#sql</span>
+                    <span class="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded-full">#оптимизация</span>
+                </div>
+            </div>
+            <!-- Принятый ответ  -->
+            <div class="mt-3 bg-blue-50 p-3 rounded-lg text-sm">
+                <i class="fas fa-check-circle text-green-600 mr-1"></i> Принятый ответ от @ivan_win: «Попробуйте покрывающие индексы и проанализируйте статистику...»
+            </div>
+        </article>
+
+        <div class="flex justify-center mt-6">
+            <nav class="inline-flex rounded-md shadow-sm">
+                <a href="#" class="px-3 py-2 border rounded-l-md bg-white text-gray-500 hover:bg-gray-50">Назад</a>
+                <a href="#" class="px-3 py-2 border-t border-b bg-blue-600 text-white">1</a>
+                <a href="#" class="px-3 py-2 border-t border-b bg-white text-gray-700">2</a>
+                <a href="#" class="px-3 py-2 border rounded-r-md bg-white text-gray-500">Вперёд</a>
+            </nav>
+        </div>
+    </div>
+
+    <!-- Правая колонка: сообщества + теги + рекомендации -->
+    <div class="lg:w-1/3 space-y-6">
+        <!-- Создать сообщество -->
+        <div class="bg-white rounded-xl shadow-sm p-4">
+            <h3 class="font-bold text-lg mb-2"> Сообщества</h3>
+            <p class="text-sm text-gray-500 mb-3">Присоединяйтесь к тематическим группам и делитесь знаниями</p>
+            <button class="w-full bg-gray-100 text-gray-700 py-2 rounded-lg text-sm hover:bg-gray-200 transition">
+                + Создать новое сообщество
+            </button>
+        </div>
+
+        <!-- Список сообществ (пример) -->
+        <div class="bg-white rounded-xl shadow-sm p-4">
+            <div class="space-y-3">
+                <div class="flex justify-between items-center">
+                    <div><i class="fab fa-python text-blue-500 w-5"></i> <span class="font-medium">Python для анализа данных</span></div>
+                    <span class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">123 участника</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <div><i class="fas fa-database text-yellow-600 w-5"></i> <span class="font-medium">PostgreSQL мастера</span></div>
+                    <span class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">87 участников</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <div><i class="fab fa-react text-blue-400 w-5"></i> <span class="font-medium">React & друзья</span></div>
+                    <span class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">205 участников</span>
+                </div>
+            </div>
+            <a href="#" class="text-blue-600 text-sm mt-3 inline-block">Все сообщества →</a>
+        </div>
+
+
+        <div class="bg-white rounded-xl shadow-sm p-4">
+            <h3 class="font-bold text-lg mb-3">🏷 Популярные теги</h3>
+            <div class="flex flex-wrap gap-2">
+                <span class="bg-gray-100 px-3 py-1 rounded-full text-sm hover:bg-blue-100 cursor-pointer">#python</span>
+                <span class="bg-gray-100 px-3 py-1 rounded-full text-sm">#sql</span>
+                <span class="bg-gray-100 px-3 py-1 rounded-full text-sm">#django</span>
+                <span class="bg-gray-100 px-3 py-1 rounded-full text-sm">#react</span>
+                <span class="bg-gray-100 px-3 py-1 rounded-full text-sm">#postgresql</span>
+                <span class="bg-gray-100 px-3 py-1 rounded-full text-sm">#machinelearning</span>
+                <span class="bg-gray-100 px-3 py-1 rounded-full text-sm">#javascript</span>
+            </div>
+        </div>
+
+        <!-- From the Archives -->
+        <div class="bg-white rounded-xl shadow-sm p-4">
+            <h3 class="font-bold text-lg flex items-center"><i class="fas fa-clock mr-2 text-gray-400"></i> Вы могли пропустить</h3>
+            <div class="mt-3 space-y-3">
+                <div>
+                    <a href="#" class="font-medium hover:text-blue-600">Почему не стоит бояться рефакторинга</a>
+                    <p class="text-xs text-gray-400">Анна Сергеева · 3 месяца назад</p>
+                </div>
+                <div>
+                    <a href="#" class="font-medium hover:text-blue-600">Теория типов простыми словами</a>
+                    <p class="text-xs text-gray-400">Иван Соколов · 8 месяцев назад</p>
+                </div>
+                <div>
+                    <a href="#" class="font-medium hover:text-blue-600">10 лайфхаков для работы в терминале</a>
+                    <p class="text-xs text-gray-400">Максим Глебов · 1 год назад</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
