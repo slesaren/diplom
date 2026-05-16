@@ -1,189 +1,387 @@
 <!-- templates/profile.html -->
 {% extends "base.html" %}
 
-{% block title %}Мой профиль — KnowFlow{% endblock %}
+{% block title %}Профиль {{ user.username }} — QArticle{% endblock %}
 
 {% block content %}
 <div class="space-y-6">
-    <!-- Карточка профиля (информация, аватар, рейтинг) -->
+    <!-- Карточка профиля -->
     <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div class="bg-gradient-to-r from-indigo-500 to-purple-600 h-24"></div>
         <div class="px-6 pb-6 relative">
-            <!-- Аватар с возможностью редактирования -->
+            <!-- Аватар -->
             <div class="flex flex-col md:flex-row md:items-end gap-4 -mt-12">
                 <div class="relative">
-                    <img src="https://randomuser.me/api/portraits/men/32.jpg" alt="avatar"
+                    <img src="{{ user.avatar_url }}" alt="avatar"
                          class="w-24 h-24 rounded-full border-4 border-white shadow-md bg-white">
+                    {% if user.id == current_user.id %}
                     <label for="avatar_upload" class="absolute bottom-0 right-0 bg-indigo-600 p-1 rounded-full cursor-pointer hover:bg-indigo-700">
                         <i class="fas fa-camera text-white text-xs"></i>
                         <input type="file" id="avatar_upload" class="hidden" accept="image/*">
                     </label>
+                    {% endif %}
                 </div>
                 <div class="flex-1">
-                    <h1 class="text-2xl font-bold text-gray-800">Иван Петров</h1>
+                    <h1 class="text-2xl font-bold text-gray-800">{{ user.username }}</h1>
                     <div class="flex flex-wrap gap-3 text-sm text-gray-500 mt-1">
-                        <span><i class="fas fa-at"></i> @ivan_pandas</span>
-                        <span><i class="far fa-calendar-alt"></i> Регистрация: март 2024</span>
-                        <span><i class="fas fa-map-marker-alt"></i> Москва, РФ</span>
+                        <span><i class="fas fa-at"></i> @{{ user.username }}</span>
+                        <span><i class="far fa-calendar-alt"></i> Регистрация: {{ user.created_at.strftime('%B %Y') }}</span>
+                        {% if user.bio and user.bio != '' %}
+                        <span><i class="fas fa-map-marker-alt"></i> {{ user.bio[:50] }}</span>
+                        {% endif %}
                     </div>
                 </div>
-                <div>
-                    <button class="bg-indigo-50 text-indigo-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-100 transition">
-                        <i class="fas fa-pen"></i> Редактировать профиль
+                {% if user.id == current_user.id %}
+                <div class="flex space-x-2">
+                    <button onclick="showEditProfile()" class="bg-indigo-50 text-indigo-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-100">
+                        <i class="fas fa-pen"></i> Редактировать
                     </button>
-
-                    <div class="flex space-x-2">
-    <button class="bg-indigo-50 text-indigo-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-100">
-        <i class="fas fa-pen"></i> Редактировать
-    </button>
-    <form method="POST" action="{{ url_for('delete_profile') }}" onsubmit="return confirm('Вы уверены? Профиль и все данные будут удалены без возможности восстановления.');">
-        <button type="submit" class="bg-red-50 text-red-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-100">
-            <i class="fas fa-trash-alt"></i> Удалить аккаунт
-        </button>
-    </form>
-</div>
-
+                    <form method="POST" action="{{ url_for('delete_profile') }}" onsubmit="return confirm('Вы уверены? Профиль и все данные будут удалены без возможности восстановления.');">
+                        <button type="submit" class="bg-red-50 text-red-700 px-4 py-2 rounded-lg text-sm font-medium hover:bg-red-100">
+                            <i class="fas fa-trash-alt"></i> Удалить аккаунт
+                        </button>
+                    </form>
                 </div>
+                {% elif current_user.is_authenticated %}
+                <button onclick="subscribeUser({{ user.id }})" id="subscribeBtn"
+                        class="px-4 py-2 rounded-lg text-sm font-medium transition
+                               {% if is_subscribed %}bg-indigo-600 text-white{% else %}bg-gray-100 text-gray-700 hover:bg-indigo-100{% endif %}">
+                    <i class="fas fa-bell"></i>
+                    <span>{% if is_subscribed %}Отписаться{% else %}Подписаться{% endif %}</span>
+                </button>
+                {% endif %}
             </div>
 
-            <!-- Статистика: глобальный рейтинг и карма -->
+            <!-- Статистика -->
             <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 border-t pt-6">
                 <div class="text-center">
-                    <div class="text-2xl font-bold text-gray-800">1,284</div>
+                    <div class="text-2xl font-bold text-gray-800">{{ user.reputation }}</div>
                     <div class="text-xs text-gray-500">Глобальная репутация</div>
                 </div>
                 <div class="text-center">
-                    <div class="text-2xl font-bold text-green-600">47</div>
-                    <div class="text-xs text-gray-500">Лучший ответ</div>
+                    <div class="text-2xl font-bold text-green-600">{{ user.answers_count|default(0) }}</div>
+                    <div class="text-xs text-gray-500">Ответов</div>
                 </div>
                 <div class="text-center">
-                    <div class="text-2xl font-bold text-indigo-600">12</div>
+                    <div class="text-2xl font-bold text-indigo-600">{{ user.articles|length }}</div>
                     <div class="text-xs text-gray-500">Статей</div>
                 </div>
                 <div class="text-center">
-                    <div class="text-2xl font-bold text-amber-600">3</div>
+                    <div class="text-2xl font-bold text-amber-600">{{ user.group_memberships|length }}</div>
                     <div class="text-xs text-gray-500">Групп</div>
                 </div>
             </div>
 
-            <!-- О себе и ссылки -->
+            <!-- О себе -->
             <div class="mt-4 p-4 bg-gray-50 rounded-lg">
                 <div class="flex justify-between items-center">
                     <h3 class="font-semibold text-gray-700"><i class="fas fa-address-card"></i> О себе</h3>
-                    <button class="text-xs text-indigo-600 hover:underline">Редактировать</button>
+                    {% if user.id == current_user.id %}
+                    <button onclick="showEditBio()" class="text-xs text-indigo-600 hover:underline">Редактировать</button>
+                    {% endif %}
                 </div>
-                <p class="text-sm text-gray-600 mt-2">Data Scientist с 3-летним опытом. Люблю Python, Pandas и учить новичков. Автор курса по визуализации данных.</p>
+                <p class="text-sm text-gray-600 mt-2">{{ user.bio if user.bio else 'Пользователь пока ничего не рассказал о себе.' }}</p>
                 <div class="flex flex-wrap gap-3 mt-3 text-sm">
-                    <a href="#" class="text-gray-500 hover:text-indigo-600"><i class="fab fa-github"></i> github.com/ivan_pandas</a>
-                    <a href="#" class="text-gray-500 hover:text-indigo-600"><i class="fab fa-telegram"></i> @ivan_ds</a>
-                    <a href="#" class="text-gray-500 hover:text-indigo-600"><i class="fas fa-globe"></i> ivanpandas.dev</a>
+                    <!-- Можно добавить социальные ссылки позже -->
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Репутация внутри групп + список активных групп -->
+    <!-- Репутация в группах -->
+    {% if user.group_memberships %}
     <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
         <h3 class="text-lg font-semibold text-gray-800 flex items-center gap-2 mb-3">
             <i class="fas fa-layer-group text-indigo-500"></i> Репутация в сообществах
         </h3>
         <div class="grid md:grid-cols-2 gap-4">
+            {% for membership in user.group_memberships %}
             <div class="flex justify-between items-center border-b pb-2">
-                <div><span class="font-medium"> Python Data Science</span> <span class="text-xs text-gray-400">(участник)</span></div>
-                <div class="text-indigo-600 font-semibold">1,240 реп.</div>
+                <div>
+                    <a href="{{ url_for('group_detail', group_id=membership.group.id) }}" class="font-medium hover:text-indigo-600">
+                        {{ membership.group.name }}
+                    </a>
+                    <span class="text-xs text-gray-400 ml-2">({{ membership.role }})</span>
+                </div>
+                <div class="{% if membership.karma_in_group > 100 %}text-indigo-600 font-semibold{% else %}text-gray-500{% endif %}">
+                    {{ membership.karma_in_group }} реп.
+                </div>
             </div>
-            <div class="flex justify-between items-center border-b pb-2">
-                <div><span class="font-medium"> Frontend Craft</span> <span class="text-xs text-gray-400">(новичок)</span></div>
-                <div class="text-gray-500">45 реп.</div>
-            </div>
-            <div class="flex justify-between items-center border-b pb-2">
-                <div><span class="font-medium"> DevOps & Cloud</span> <span class="text-xs text-gray-400">(модератор)</span></div>
-                <div class="text-indigo-600 font-semibold">890 реп.</div>
-            </div>
-        </div>
-        <div class="mt-4 text-sm">
-            <a href="/groups" class="text-indigo-600 hover:underline">Исследовать другие сообщества →</a>
+            {% endfor %}
         </div>
     </div>
+    {% endif %}
 
-    <!-- Вкладки с контентом пользователя (статьи / вопросы / комментарии / закладки) -->
+    <!-- Вкладки с контентом пользователя -->
     <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div class="border-b border-gray-200">
             <nav class="flex gap-6 px-5">
-                <button class="py-3 text-indigo-600 border-b-2 border-indigo-600 font-medium text-sm">Мои статьи</button>
-                <button class="py-3 text-gray-500 hover:text-gray-700 text-sm">Мои вопросы</button>
-                <button class="py-3 text-gray-500 hover:text-gray-700 text-sm">Комментарии</button>
-                <button class="py-3 text-gray-500 hover:text-gray-700 text-sm">Закладки</button>
+                <button onclick="showTab('articles')" id="tab-articles"
+                        class="tab-btn py-3 border-b-2 font-medium text-sm {% if active_tab == 'articles' %}border-indigo-600 text-indigo-600{% else %}border-transparent text-gray-500 hover:text-gray-700{% endif %}">
+                    Мои статьи ({{ user.articles|length }})
+                </button>
+                <button onclick="showTab('questions')" id="tab-questions"
+                        class="tab-btn py-3 border-b-2 font-medium text-sm {% if active_tab == 'questions' %}border-indigo-600 text-indigo-600{% else %}border-transparent text-gray-500 hover:text-gray-700{% endif %}">
+                    Мои вопросы ({{ user.questions|length }})
+                </button>
+                <button onclick="showTab('comments')" id="tab-comments"
+                        class="tab-btn py-3 border-b-2 font-medium text-sm {% if active_tab == 'comments' %}border-indigo-600 text-indigo-600{% else %}border-transparent text-gray-500 hover:text-gray-700{% endif %}">
+                    Комментарии ({{ user.comments|length }})
+                </button>
+                {% if user.id == current_user.id %}
+                <button onclick="showTab('bookmarks')" id="tab-bookmarks"
+                        class="tab-btn py-3 border-b-2 font-medium text-sm {% if active_tab == 'bookmarks' %}border-indigo-600 text-indigo-600{% else %}border-transparent text-gray-500 hover:text-gray-700{% endif %}">
+                    Закладки
+                </button>
+                {% endif %}
             </nav>
         </div>
-        <div class="p-5">
-            <!-- Список статей пользователя -->
-            <div class="space-y-4">
-                <div class="border-b pb-3">
-                    <a href="/article/1" class="text-lg font-medium text-gray-800 hover:text-indigo-600">Глубокое погружение в группировки Pandas</a>
-                    <div class="flex gap-3 text-xs text-gray-500 mt-1">
-                        <span><i class="far fa-calendar"></i> 2 дня назад</span>
-                        <span><i class="far fa-thumbs-up"></i> 47 лайков</span>
-                        <span><i class="far fa-comment"></i> 12 комментариев</span>
-                        <span class="text-green-600">Опубликовано</span>
-                    </div>
-                </div>
-                <div class="border-b pb-3">
-                    <a href="#" class="text-lg font-medium text-gray-800 hover:text-indigo-600">Визуализация данных: от matplotlib до plotly</a>
-                    <div class="flex gap-3 text-xs text-gray-500 mt-1">
-                        <span><i class="far fa-calendar"></i> 2 недели назад</span>
-                        <span><i class="far fa-thumbs-up"></i> 124 лайка</span>
-                        <span><i class="far fa-comment"></i> 28 комментариев</span>
-                        <span class="text-green-600">Опубликовано</span>
-                    </div>
-                </div>
-                <div class="border-b pb-3">
-                    <a href="#" class="text-lg font-medium text-gray-800 hover:text-indigo-600">Черновик: Оптимизация SQL запросов</a>
-                    <div class="flex gap-3 text-xs text-gray-500 mt-1">
-                        <span><i class="far fa-clock"></i> Черновик от 01.05.2025</span>
-                        <span class="text-amber-600"><i class="fas fa-pen"></i> Не опубликовано</span>
-                    </div>
-                </div>
-            </div>
-            <div class="mt-4 text-center">
-                <button class="text-indigo-600 text-sm hover:underline"><i class="fas fa-plus"></i> Написать новую статью</button>
-            </div>
-        </div>
-    </div>
 
-    <!-- Подписки и уведомления пример -->
-    <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-        <div class="flex justify-between items-center">
-            <h3 class="font-semibold text-gray-800 flex items-center gap-2"><i class="fas fa-bell"></i> Управление подписками</h3>
-            <a href="#" class="text-indigo-600 text-sm">Настроить уведомления</a>
-        </div>
-        <div class="flex flex-wrap gap-4 mt-3 text-sm">
-            <div class="bg-gray-100 px-3 py-1 rounded-full"><i class="fas fa-tag"></i> #pandas</div>
-            <div class="bg-gray-100 px-3 py-1 rounded-full"><i class="fas fa-tag"></i> #docker</div>
-            <div class="bg-gray-100 px-3 py-1 rounded-full"><i class="fas fa-user"></i> Автор: @anna_ml</div>
-            <div class="bg-gray-100 px-3 py-1 rounded-full"><i class="fas fa-users"></i> Группа: Python Data Science</div>
+        <div class="p-5">
+            <!-- Статьи -->
+            <div id="content-articles" class="tab-content {% if active_tab != 'articles' %}hidden{% endif %}">
+                {% if user.articles %}
+                <div class="space-y-4">
+                    {% for article in user.articles %}
+                    <div class="border-b pb-3">
+                        <a href="{{ url_for('post_detail', post_id=article.id) }}"
+                           class="text-lg font-medium text-gray-800 hover:text-indigo-600">
+                            {{ article.title }}
+                        </a>
+                        <div class="flex gap-3 text-xs text-gray-500 mt-1">
+                            <span><i class="far fa-calendar"></i> {{ article.created_at.strftime('%d.%m.%Y') }}</span>
+                            <span><i class="far fa-thumbs-up"></i> {{ article.rating }} лайков</span>
+                            <span><i class="far fa-comment"></i> {{ article.comments|length }} комментариев</span>
+                            <span><i class="far fa-eye"></i> {{ article.view_count }} просмотров</span>
+                            <span class="{% if article.status == 'published' %}text-green-600{% else %}text-amber-600{% endif %}">
+                                {{ 'Опубликовано' if article.status == 'published' else 'Черновик' }}
+                            </span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-gray-500 text-center py-8">У вас пока нет статей. <a href="{{ url_for('create_post') }}" class="text-indigo-600">Написать первую статью</a></p>
+                {% endif %}
+            </div>
+
+            <!-- Вопросы -->
+            <div id="content-questions" class="tab-content {% if active_tab != 'questions' %}hidden{% endif %}">
+                {% if user.questions %}
+                <div class="space-y-4">
+                    {% for question in user.questions %}
+                    <div class="border-b pb-3">
+                        <a href="{{ url_for('post_detail', post_id=question.id) }}"
+                           class="text-lg font-medium text-gray-800 hover:text-indigo-600">
+                            {{ question.title }}
+                        </a>
+                        <div class="flex gap-3 text-xs text-gray-500 mt-1">
+                            <span><i class="far fa-calendar"></i> {{ question.created_at.strftime('%d.%m.%Y') }}</span>
+                            <span><i class="far fa-thumbs-up"></i> {{ question.rating }} голосов</span>
+                            <span><i class="far fa-comment"></i> {{ question.comments|length }} ответов</span>
+                            {% if question.is_resolved %}
+                            <span class="text-green-600"><i class="fas fa-check-circle"></i> Решён</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-gray-500 text-center py-8">У вас пока нет вопросов. <a href="{{ url_for('create_post') }}" class="text-indigo-600">Задать первый вопрос</a></p>
+                {% endif %}
+            </div>
+
+            <!-- Комментарии -->
+            <div id="content-comments" class="tab-content {% if active_tab != 'comments' %}hidden{% endif %}">
+                {% if user.comments %}
+                <div class="space-y-4">
+                    {% for comment in user.comments|sort(attribute='created_at', reverse=true) %}
+                    <div class="border-b pb-3">
+                        <p class="text-gray-700">{{ comment.content[:200] }}{% if comment.content|length > 200 %}...{% endif %}</p>
+                        <div class="flex gap-3 text-xs text-gray-500 mt-2">
+                            <span><i class="far fa-calendar"></i> {{ comment.created_at.strftime('%d.%m.%Y %H:%M') }}</span>
+                            <span><i class="far fa-thumbs-up"></i> {{ comment.rating }}</span>
+                            <a href="{{ url_for('post_detail', post_id=comment.post_id) }}#comment-{{ comment.id }}"
+                               class="text-indigo-600 hover:underline">К посту</a>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-gray-500 text-center py-8">У вас пока нет комментариев.</p>
+                {% endif %}
+            </div>
+
+            <!-- Закладки -->
+            {% if user.id == current_user.id %}
+            <div id="content-bookmarks" class="tab-content {% if active_tab != 'bookmarks' %}hidden{% endif %}">
+                {% if bookmarked_posts %}
+                <div class="space-y-4">
+                    {% for bookmark in bookmarked_posts %}
+                    <div class="border-b pb-3">
+                        <a href="{{ url_for('post_detail', post_id=bookmark.post.id) }}"
+                           class="text-lg font-medium text-gray-800 hover:text-indigo-600">
+                            {{ bookmark.post.title }}
+                        </a>
+                        <div class="flex gap-3 text-xs text-gray-500 mt-1">
+                            <span><i class="far fa-calendar"></i> {{ bookmark.post.created_at.strftime('%d.%m.%Y') }}</span>
+                            <span><i class="far fa-thumbs-up"></i> {{ bookmark.post.rating }}</span>
+                            <span><i class="fas fa-bookmark"></i> Сохранено: {{ bookmark.saved_at.strftime('%d.%m.%Y') }}</span>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <p class="text-gray-500 text-center py-8">У вас пока нет сохранённых постов.</p>
+                {% endif %}
+            </div>
+            {% endif %}
         </div>
     </div>
 </div>
-{% endblock %}
 
-{% block extra_js %}
+<!-- Модальное окно редактирования профиля -->
+<div id="editProfileModal" class="modal-overlay">
+    <div class="modal-content p-6">
+        <h3 class="text-xl font-bold mb-4">Редактировать профиль</h3>
+        <form method="POST" action="{{ url_for('edit_profile') }}">
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">О себе</label>
+                <textarea name="bio" rows="4" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">{{ user.bio }}</textarea>
+            </div>
+            <div class="flex justify-end gap-3">
+                <button type="button" onclick="closeEditProfile()" class="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">Отмена</button>
+                <button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Сохранить</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <script>
-    // Имитация загрузки аватара
-    document.getElementById('avatar_upload')?.addEventListener('change', function(e) {
-        if (e.target.files.length) {
-            alert('Демо: загрузка аватара. потом файл будет отправится на сервер.');
-        }
+function showTab(tabName) {
+    // Скрыть все контенты
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.add('hidden');
     });
-    // Имитация переключения вкладок  для демонстрации
-    const tabs = document.querySelectorAll('.border-b button');
-    const contents = {
-        articles: 'Мои статьи',
-        questions: 'Список вопросов пользователя',
-        comments: 'Последние комментарии',
-        bookmarks: 'Сохранённые статьи'
-    };
-    //  нужно будет подгружать контент через AJAX или показывать блоки.
 
+    // Показать выбранный контент
+    document.getElementById(`content-${tabName}`).classList.remove('hidden');
+
+    // Обновить активную вкладку
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('border-indigo-600', 'text-indigo-600');
+        btn.classList.add('border-transparent', 'text-gray-500');
+    });
+
+    document.getElementById(`tab-${tabName}`).classList.remove('border-transparent', 'text-gray-500');
+    document.getElementById(`tab-${tabName}`).classList.add('border-indigo-600', 'text-indigo-600');
+
+    // Сохранить в localStorage
+    localStorage.setItem('profileTab', tabName);
+}
+
+// Восстановить последнюю вкладку
+const savedTab = localStorage.getItem('profileTab');
+if (savedTab && document.getElementById(`tab-${savedTab}`)) {
+    showTab(savedTab);
+}
+
+function showEditProfile() {
+    document.getElementById('editProfileModal').classList.add('active');
+}
+
+function closeEditProfile() {
+    document.getElementById('editProfileModal').classList.remove('active');
+}
+
+function showEditBio() {
+    showEditProfile();
+}
+
+async function subscribeUser(userId) {
+    try {
+        const response = await fetch('/subscribe', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                target_type: 'author',
+                target_id: userId
+            })
+        });
+
+        const data = await response.json();
+        const btn = document.getElementById('subscribeBtn');
+
+        if (data.subscribed) {
+            btn.classList.remove('bg-gray-100', 'text-gray-700');
+            btn.classList.add('bg-indigo-600', 'text-white');
+            btn.querySelector('span').textContent = 'Отписаться';
+        } else {
+            btn.classList.remove('bg-indigo-600', 'text-white');
+            btn.classList.add('bg-gray-100', 'text-gray-700');
+            btn.querySelector('span').textContent = 'Подписаться';
+        }
+    } catch (error) {
+        console.error('Error subscribing:', error);
+    }
+}
+
+// Загрузка аватара
+document.getElementById('avatar_upload')?.addEventListener('change', async function(e) {
+    if (e.target.files.length) {
+        const formData = new FormData();
+        formData.append('avatar', e.target.files[0]);
+
+        try {
+            const response = await fetch('/upload_avatar', {
+                method: 'POST',
+                body: formData
+            });
+
+            const data = await response.json();
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Ошибка загрузки аватара');
+            }
+        } catch (error) {
+            console.error('Error uploading avatar:', error);
+        }
+    }
+});
 </script>
+
+<style>
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-overlay.active {
+    display: flex;
+}
+
+.modal-content {
+    background-color: white;
+    border-radius: 0.75rem;
+    max-width: 500px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.hidden {
+    display: none;
+}
+</style>
 {% endblock %}

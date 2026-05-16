@@ -13,7 +13,8 @@ import sys
 import os
 from flask_login import UserMixin, LoginManager, login_user, current_user, login_required, logout_user
 from config import Config
-from models import db, User
+from models import db, User, Post, Tag, PostTag, Comment, Vote, Group, UserGroup, Article, Question, Bookmark, \
+    Subscription
 from redis_utils import RedisBookStats
 
 from flask_sqlalchemy import SQLAlchemy
@@ -235,10 +236,53 @@ def logout():
     flash('Вы вышли из системы.', 'info')
     return redirect(url_for('index'))
 
+
+
+
 @app.route('/profile')
 @login_required
 def profile():
-    return render_template('profile.html', user=current_user)
+    active_tab = request.args.get('tab', 'articles')
+    bookmarked_posts = Bookmark.query.filter_by(user_id=current_user.id).all()
+
+    # Проверить подписку если просматриваем чужой профиль
+    is_subscribed = False
+    #  добавить логику подписки
+
+    return render_template('profile.html',
+                           user=current_user,
+                           active_tab=active_tab,
+                           bookmarked_posts=bookmarked_posts,
+                           is_subscribed=is_subscribed)
+
+
+@app.route('/edit_profile', methods=['POST'])
+@login_required
+def edit_profile():
+    bio = request.form.get('bio', '').strip()
+    current_user.bio = bio
+    db.session.commit()
+    flash('Профиль обновлен', 'success')
+    return redirect(url_for('profile'))
+
+
+@app.route('/upload_avatar', methods=['POST'])
+@login_required
+def upload_avatar():
+    if 'avatar' not in request.files:
+        return jsonify({'error': 'No file uploaded'}), 400
+
+    file = request.files['avatar']
+    if file.filename == '':
+        return jsonify({'error': 'No file selected'}), 400
+
+    # нужно будет добавить логику сохранения файла
+
+
+    return jsonify({'success': True})
+
+
+
 
 @app.route('/delete_profile', methods=['POST'])
 @login_required
@@ -272,7 +316,389 @@ def delete_profile():
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    page = request.args.get('page', 1, type=int)
+    filter_type = request.args.get('filter', 'all')
+
+    query = Post.query.filter_by(status='published')
+
+    if filter_type == 'article':
+        query = query.filter_by(type='article')
+    elif filter_type == 'question':
+        query = query.filter_by(type='question')
+
+    posts = query.order_by(Post.created_at.desc()).paginate(page=page, per_page=10)
+    groups = Group.query.limit(5).all()
+    popular_tags = db.session.query(Tag).join(PostTag).group_by(Tag.id).order_by(
+        func.count(PostTag.post_id).desc()).limit(10).all()
+    top_users = User.query.order_by(User.reputation.desc()).limit(5).all()
+    bookmarked_post_ids = []
+    if current_user.is_authenticated:
+        bookmarked_post_ids = [b.post_id for b in Bookmark.query.filter_by(user_id=current_user.id).all()]
+
+    return render_template('index.html',
+                           posts=posts,
+                           groups=groups,
+                           popular_tags=popular_tags,
+                           top_users=top_users,
+                           bookmarked_post_ids=bookmarked_post_ids)
+
+
+@app.route('/groups')
+def groups():
+    page = request.args.get('page', 1, type=int)
+    groups_list = Group.query.filter_by(is_private=False).paginate(page=page, per_page=20)
+    return render_template('groups.html', groups=groups_list)
+
+
+@app.route('/group/<int:group_id>')
+def group_detail(group_id):
+    group = db.session.get(Group, group_id)
+    if not group:
+        abort(404)
+
+    # Проверка доступа к приватной группе
+    if group.is_private and not current_user.is_authenticated:
+        flash('Это приватное сообщество. Войдите для доступа.', 'warning')
+        return redirect(url_for('login'))
+
+    if group.is_private:
+        membership = UserGroup.query.filter_by(user_id=current_user.id, group_id=group_id).first()
+        if not membership and group.owner_id != current_user.id:
+            abort(403)
+
+    posts = Post.query.filter_by(group_id=group_id, status='published').order_by(Post.created_at.desc()).all()
+    members = UserGroup.query.filter_by(group_id=group_id).limit(20).all()
+
+    return render_template('group_detail.html', group=group, posts=posts, members=members)
+
+
+@app.route('/group/<int:group_id>/join', methods=['POST'])
+@login_required
+def join_group(group_id):
+    group = db.session.get(Group, group_id)
+    if not group:
+        abort(404)
+
+    existing = UserGroup.query.filter_by(user_id=current_user.id, group_id=group_id).first()
+    if existing:
+        flash('Вы уже состоите в этом сообществе', 'info')
+        return redirect(url_for('group_detail', group_id=group_id))
+
+    membership = UserGroup(user_id=current_user.id, group_id=group_id, role='member')
+    db.session.add(membership)
+    db.session.commit()
+
+    flash(f'Вы присоединились к сообществу "{group.name}"', 'success')
+    return redirect(url_for('group_detail', group_id=group_id))
+
+
+@app.route('/group/create', methods=['GET', 'POST'])
+@login_required
+def create_group():
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        description = request.form.get('description', '').strip()
+        is_private = request.form.get('is_private') == 'on'
+
+        if not name:
+            flash('Название группы обязательно', 'danger')
+            return render_template('create_group.html')
+
+        existing = Group.query.filter_by(name=name).first()
+        if existing:
+            flash('Группа с таким названием уже существует', 'danger')
+            return render_template('create_group.html')
+
+        group = Group(
+            name=name,
+            description=description,
+            owner_id=current_user.id,
+            is_private=is_private
+        )
+        db.session.add(group)
+        db.session.commit()
+
+        # Автоматически добавляем создателя как админа
+        membership = UserGroup(user_id=current_user.id, group_id=group.id, role='admin', karma_in_group=0)
+        db.session.add(membership)
+        db.session.commit()
+
+        flash(f'Группа "{name}" успешно создана!', 'success')
+        return redirect(url_for('group_detail', group_id=group.id))
+
+    return render_template('create_group.html')
+
+
+
+
+@app.route('/post/<int:post_id>')
+def post_detail(post_id):
+    post = db.session.get(Post, post_id)
+    if not post:
+        abort(404)
+
+    post.view_count += 1
+    db.session.commit()
+
+    comments = Comment.query.filter_by(post_id=post_id, parent_comment_id=None).order_by(Comment.created_at).all()
+    answers = []
+    if post.type == 'question':
+        answers = Comment.query.filter_by(question_id=post_id, is_answer=True).order_by(Comment.rating.desc()).all()
+
+    return render_template('post_detail.html', post=post, comments=comments, answers=answers)
+
+
+@app.route('/create', methods=['GET', 'POST'])
+@login_required
+def create_post():
+    if request.method == 'POST':
+        post_type = request.form.get('type')
+        title = request.form.get('title', '').strip()
+        content = request.form.get('content', '').strip()
+        group_id = request.form.get('group_id')
+        tags_input = request.form.get('tags', '').strip()
+
+        if not title or not content:
+            flash('Заполните заголовок и содержание', 'danger')
+            return render_template('create_post.html')
+
+        group_id = int(group_id) if group_id and group_id.isdigit() else None
+        if group_id:
+            group = db.session.get(Group, group_id)
+            if group and group.is_private:
+                membership = UserGroup.query.filter_by(user_id=current_user.id, group_id=group_id).first()
+                if not membership and group.owner_id != current_user.id:
+                    flash('У вас нет доступа к этой группе', 'danger')
+                    return render_template('create_post.html')
+
+        if post_type == 'article':
+            post = Article(
+                type='article',
+                title=title,
+                content=content,
+                author_id=current_user.id,
+                group_id=group_id,
+                is_curated=False
+            )
+        else:
+            post = Question(
+                type='question',
+                title=title,
+                content=content,
+                author_id=current_user.id,
+                group_id=group_id,
+                is_resolved=False
+            )
+
+        db.session.add(post)
+        db.session.commit()
+
+        if tags_input:
+            tags = [t.strip().lower() for t in tags_input.split(',') if t.strip()]
+            for tag_name in tags:
+                tag = Tag.query.filter_by(name=tag_name).first()
+                if not tag:
+                    tag = Tag(name=tag_name)
+                    db.session.add(tag)
+                    db.session.flush()
+                post_tag = PostTag(post_id=post.id, tag_id=tag.id)
+                db.session.add(post_tag)
+            db.session.commit()
+
+        flash('Пост успешно создан!', 'success')
+        return redirect(url_for('post_detail', post_id=post.id))
+
+    groups = Group.query.all() if current_user.is_authenticated else []
+    return render_template('create_post.html', groups=groups)
+
+
+@app.route('/post/<int:post_id>/edit', methods=['GET', 'POST'])
+@login_required
+def edit_post(post_id):
+    post = db.session.get(Post, post_id)
+    if not post or post.author_id != current_user.id:
+        abort(404)
+
+    if request.method == 'POST':
+        post.title = request.form.get('title', '').strip()
+        post.content = request.form.get('content', '').strip()
+        post.updated_at = datetime.utcnow()
+        db.session.commit()
+        flash('Пост обновлен', 'success')
+        return redirect(url_for('post_detail', post_id=post.id))
+
+    return render_template('edit_post.html', post=post)
+
+
+@app.route('/post/<int:post_id>/comment', methods=['POST'])
+@login_required
+def add_comment(post_id):
+    post = db.session.get(Post, post_id)
+    if not post:
+        abort(404)
+
+    content = request.form.get('content', '').strip()
+    parent_id = request.form.get('parent_id')
+    is_answer = request.form.get('is_answer') == 'on' and post.type == 'question'
+
+    if not content:
+        flash('Комментарий не может быть пустым', 'danger')
+        return redirect(url_for('post_detail', post_id=post_id))
+
+    comment = Comment(
+        content=content,
+        author_id=current_user.id,
+        post_id=post_id,
+        parent_comment_id=int(parent_id) if parent_id else None,
+        is_answer=is_answer,
+        question_id=post_id if is_answer else None
+    )
+
+    db.session.add(comment)
+    db.session.commit()
+
+    flash('Комментарий добавлен', 'success')
+    return redirect(url_for('post_detail', post_id=post_id))
+
+
+@app.route('/comment/<int:comment_id>/delete', methods=['POST'])
+@login_required
+def delete_comment(comment_id):
+    comment = db.session.get(Comment, comment_id)
+    if not comment or comment.author_id != current_user.id:
+        abort(404)
+
+    db.session.delete(comment)
+    db.session.commit()
+    flash('Комментарий удален', 'success')
+    return redirect(url_for('post_detail', post_id=comment.post_id))
+
+
+@app.route('/vote', methods=['POST'])
+@login_required
+def vote():
+    data = request.get_json()
+    target_type = data.get('target_type')  # 'post' or 'comment'
+    target_id = data.get('target_id')
+    value = int(data.get('value'))  # 1 or -1
+
+    if target_type not in ['post', 'comment'] or value not in [1, -1]:
+        return jsonify({'error': 'Invalid request'}), 400
+
+    existing_vote = Vote.query.filter_by(
+        user_id=current_user.id,
+        target_type=target_type,
+        target_id=target_id
+    ).first()
+
+    if existing_vote:
+        if existing_vote.value == value:
+            delta = -value
+            db.session.delete(existing_vote)
+        else:
+            delta = 2 * value
+            existing_vote.value = value
+    else:
+        vote = Vote(user_id=current_user.id, target_type=target_type, target_id=target_id, value=value)
+        db.session.add(vote)
+        delta = value
+
+    if target_type == 'post':
+        target = db.session.get(Post, target_id)
+    else:
+        target = db.session.get(Comment, target_id)
+
+    if target:
+        target.rating += delta
+        author = db.session.get(User, target.author_id)
+        if author:
+            author.reputation += delta
+
+    db.session.commit()
+    new_rating = target.rating if target else 0
+
+    return jsonify({
+        'success': True,
+        'new_rating': new_rating,
+        'user_vote': value if not existing_vote or existing_vote.value != value else 0
+    })
+
+
+
+
+@app.route('/tag/<string:tag_name>')
+def tag_posts(tag_name):
+    tag = Tag.query.filter_by(name=tag_name).first_or_404()
+    page = request.args.get('page', 1, type=int)
+    posts = db.session.query(Post).join(PostTag).filter(PostTag.tag_id == tag.id).paginate(page=page, per_page=20)
+    return render_template('tag_posts.html', tag=tag, posts=posts)
+
+
+@app.route('/tags')
+def tags_list():
+    tags = Tag.query.order_by(Tag.name).all()
+    return render_template('tags.html', tags=tags)
+
+@app.route('/bookmark/<int:post_id>', methods=['POST'])
+@login_required
+def toggle_bookmark(post_id):
+    post = db.session.get(Post, post_id)
+    if not post:
+        return jsonify({'error': 'Post not found'}), 404
+
+    bookmark = Bookmark.query.filter_by(user_id=current_user.id, post_id=post_id).first()
+
+    if bookmark:
+        db.session.delete(bookmark)
+        bookmarked = False
+    else:
+        bookmark = Bookmark(user_id=current_user.id, post_id=post_id)
+        db.session.add(bookmark)
+        bookmarked = True
+
+    db.session.commit()
+
+    return jsonify({'bookmarked': bookmarked})
+
+
+@app.route('/bookmarks')
+@login_required
+def bookmarks():
+    page = request.args.get('page', 1, type=int)
+    bookmarked_posts = db.session.query(Post).join(Bookmark).filter(
+        Bookmark.user_id == current_user.id
+    ).paginate(page=page, per_page=20)
+    return render_template('bookmarks.html', posts=bookmarked_posts)
+
+
+@app.route('/subscribe', methods=['POST'])
+@login_required
+def subscribe():
+    data = request.get_json()
+    target_type = data.get('target_type')  # author, tag, group
+    target_id = data.get('target_id')
+
+    if target_type not in ['author', 'tag', 'group']:
+        return jsonify({'error': 'Invalid target type'}), 400
+
+    existing = Subscription.query.filter_by(
+        user_id=current_user.id,
+        target_type=target_type,
+        target_id=target_id
+    ).first()
+
+    if existing:
+        db.session.delete(existing)
+        subscribed = False
+    else:
+        subscription = Subscription(user_id=current_user.id, target_type=target_type, target_id=target_id)
+        db.session.add(subscription)
+        subscribed = True
+
+    db.session.commit()
+
+    return jsonify({'subscribed': subscribed})
+
 
 @app.route('/debug_session')
 @login_required
