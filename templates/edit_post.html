@@ -1,0 +1,416 @@
+{% extends "base.html" %}
+
+{% block title %}Редактировать пост — QArticle{% endblock %}
+
+{% block extra_css %}
+<style>
+    .editor-toolbar {
+        border: 1px solid #e2e8f0;
+        border-bottom: none;
+        border-radius: 0.5rem 0.5rem 0 0;
+        background: #f8fafc;
+        padding: 0.5rem;
+    }
+    .editor-toolbar button {
+        padding: 0.25rem 0.5rem;
+        margin: 0 0.125rem;
+        border-radius: 0.25rem;
+        transition: all 0.2s;
+    }
+    .editor-toolbar button:hover {
+        background: #e2e8f0;
+    }
+    .editor-content {
+        border: 1px solid #e2e8f0;
+        border-radius: 0 0 0.5rem 0.5rem;
+        min-height: 300px;
+    }
+    .tag-input {
+        display: inline-flex;
+        align-items: center;
+        background: #e0e7ff;
+        color: #3730a3;
+        padding: 0.25rem 0.5rem;
+        border-radius: 9999px;
+        font-size: 0.875rem;
+        margin: 0.25rem;
+    }
+    .tag-input button {
+        margin-left: 0.5rem;
+        color: #6366f1;
+        cursor: pointer;
+    }
+    .tag-input button:hover {
+        color: #4f46e5;
+    }
+    .status-badge {
+        display: inline-block;
+        padding: 0.25rem 0.75rem;
+        border-radius: 9999px;
+        font-size: 0.75rem;
+        font-weight: 500;
+    }
+    .status-published {
+        background: #dcfce7;
+        color: #166534;
+    }
+    .status-draft {
+        background: #fef3c7;
+        color: #92400e;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+        <div class="bg-gradient-to-r from-indigo-500 to-purple-600 px-6 py-6">
+            <h1 class="text-2xl font-bold text-white">Редактировать пост</h1>
+            <div class="flex items-center gap-3 mt-2">
+                <span class="status-badge status-{{ post.status }}">
+                    {{ 'Опубликовано' if post.status == 'published' else 'Черновик' }}
+                </span>
+                <span class="text-indigo-100 text-sm">
+                    <i class="far fa-clock"></i> Создан: {{ post.created_at.strftime('%d.%m.%Y %H:%M') }}
+                </span>
+                {% if post.updated_at != post.created_at %}
+                <span class="text-indigo-100 text-sm">
+                    <i class="fas fa-pen"></i> Обновлен: {{ post.updated_at.strftime('%d.%m.%Y %H:%M') }}
+                </span>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Форма -->
+        <form method="POST" action="{{ url_for('edit_post', post_id=post.id) }}" class="p-6" id="editPostForm">
+            <!-- Тип поста (только для чтения) -->
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Тип поста</label>
+                <div class="flex items-center gap-2">
+                    <span class="px-3 py-1 rounded-full text-sm {% if post.type == 'article' %}bg-blue-100 text-blue-700{% else %}bg-green-100 text-green-700{% endif %}">
+                        <i class="fas {% if post.type == 'article' %}fa-newspaper{% else %}fa-question-circle{% endif %} mr-1"></i>
+                        {{ 'Статья' if post.type == 'article' else 'Вопрос' }}
+                    </span>
+                    <span class="text-xs text-gray-400">Тип поста нельзя изменить после создания</span>
+                </div>
+            </div>
+
+            <div class="mb-6">
+                <label for="group_id" class="block text-sm font-medium text-gray-700 mb-2">
+                    <i class="fas fa-users"></i> Сообщество (опционально)
+                </label>
+                <select name="group_id" id="group_id" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
+                    <option value="">Без сообщества (публичный пост)</option>
+                    {% for group in groups %}
+                    <option value="{{ group.id }}" {% if post.group_id == group.id %}selected{% endif %}>
+                        {{ group.name }} {% if group.is_private %}(приватное){% endif %}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="mb-6">
+                <label for="title" class="block text-sm font-medium text-gray-700 mb-2">
+                    <i class="fas fa-heading"></i> Заголовок <span class="text-red-500">*</span>
+                </label>
+                <input type="text" id="title" name="title" required value="{{ post.title }}"
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                       placeholder="Например: Введение в машинное обучение">
+                <div class="text-xs text-gray-400 mt-1" id="titleCounter">{{ post.title|length }} / 200</div>
+            </div>
+
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">
+                    <i class="fas fa-paragraph"></i> Содержание <span class="text-red-500">*</span>
+                </label>
+
+                <!-- редактор -->
+                <div class="editor-toolbar">
+                    <button type="button" onclick="formatText('bold')" title="Жирный">
+                        <i class="fas fa-bold"></i>
+                    </button>
+                    <button type="button" onclick="formatText('italic')" title="Курсив">
+                        <i class="fas fa-italic"></i>
+                    </button>
+                    <button type="button" onclick="formatText('underline')" title="Подчеркнутый">
+                        <i class="fas fa-underline"></i>
+                    </button>
+                    <button type="button" onclick="formatText('code')" title="Код">
+                        <i class="fas fa-code"></i>
+                    </button>
+                    <button type="button" onclick="insertLink()" title="Ссылка">
+                        <i class="fas fa-link"></i>
+                    </button>
+                    <button type="button" onclick="insertImage()" title="Изображение">
+                        <i class="fas fa-image"></i>
+                    </button>
+                    <button type="button" onclick="insertCodeBlock()" title="Блок кода">
+                        <i class="fas fa-code-branch"></i>
+                    </button>
+                </div>
+
+                <textarea id="content" name="content" rows="15" required
+                          class="editor-content w-full px-3 py-2 border border-gray-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono"
+                          placeholder="Напишите содержание поста...">{{ post.content }}</textarea>
+
+                <div class="text-xs text-gray-400 mt-1" id="contentCounter">{{ post.content|length }} символов</div>
+            </div>
+
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">
+                    <i class="fas fa-tags"></i> Теги
+                </label>
+                <div class="border border-gray-300 rounded-lg p-2 focus-within:ring-2 focus-within:ring-indigo-500">
+                    <div id="tagsContainer" class="flex flex-wrap gap-1 mb-2"></div>
+                    <input type="text" id="tagInput" class="w-full px-2 py-1 outline-none"
+                           placeholder="Введите тег и нажмите Enter или пробел">
+                </div>
+                <input type="hidden" name="tags" id="tagsHidden">
+                <p class="text-xs text-gray-400 mt-1">
+                    <i class="fas fa-info-circle"></i> Теги помогают другим пользователям находить ваш пост.
+                </p>
+            </div>
+
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Статус</label>
+                <div class="flex space-x-4">
+                    <label class="flex items-center cursor-pointer">
+                        <input type="radio" name="status" value="published" {% if post.status == 'published' %}checked{% endif %} class="mr-2">
+                        <span class="flex items-center gap-2">
+                            <i class="fas fa-globe text-green-600"></i>
+                            <span>Опубликовать</span>
+                        </span>
+                    </label>
+                    <label class="flex items-center cursor-pointer">
+                        <input type="radio" name="status" value="draft" {% if post.status == 'draft' %}checked{% endif %} class="mr-2">
+                        <span class="flex items-center gap-2">
+                            <i class="fas fa-save text-yellow-600"></i>
+                            <span>Сохранить как черновик</span>
+                        </span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 pt-4 border-t">
+                <a href="{{ url_for('post_detail', post_id=post.id) }}" class="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition">
+                    Отмена
+                </a>
+                <button type="submit" class="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">
+                    <i class="fas fa-save mr-2"></i> Сохранить изменения
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Предупреждение об удалении -->
+    <div class="mt-6 bg-red-50 border border-red-200 rounded-lg p-4">
+        <h3 class="font-semibold text-red-800 mb-2">
+            <i class="fas fa-exclamation-triangle"></i> Опасная зона
+        </h3>
+        <p class="text-sm text-red-700 mb-3">Удаление поста невозможно отменить. Все комментарии и голоса будут также удалены.</p>
+        <button onclick="confirmDelete()" class="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition text-sm">
+            <i class="fas fa-trash mr-2"></i> Удалить пост
+        </button>
+    </div>
+</div>
+
+<script>
+// Счетчики символов
+const titleInput = document.getElementById('title');
+const titleCounter = document.getElementById('titleCounter');
+const contentInput = document.getElementById('content');
+const contentCounter = document.getElementById('contentCounter');
+
+titleInput.addEventListener('input', function() {
+    const count = this.value.length;
+    titleCounter.textContent = `${count} / 200`;
+    if (count > 200) {
+        titleCounter.classList.add('text-red-500');
+    } else {
+        titleCounter.classList.remove('text-red-500');
+    }
+});
+
+contentInput.addEventListener('input', function() {
+    const count = this.value.length;
+    contentCounter.textContent = `${count} символов`;
+});
+
+// Форматирование текста
+function formatText(type) {
+    const textarea = document.getElementById('content');
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = textarea.value.substring(start, end);
+    let formattedText = '';
+
+    switch(type) {
+        case 'bold':
+            formattedText = `**${selectedText}**`;
+            break;
+        case 'italic':
+            formattedText = `*${selectedText}*`;
+            break;
+        case 'underline':
+            formattedText = `<u>${selectedText}</u>`;
+            break;
+        case 'code':
+            formattedText = `\`${selectedText}\``;
+            break;
+        default:
+            return;
+    }
+
+    textarea.value = textarea.value.substring(0, start) + formattedText + textarea.value.substring(end);
+    textarea.focus();
+    textarea.setSelectionRange(start + formattedText.length, start + formattedText.length);
+}
+
+function insertLink() {
+    const url = prompt('Введите URL ссылки:', 'https://');
+    if (url) {
+        const textarea = document.getElementById('content');
+        const start = textarea.selectionStart;
+        const selectedText = textarea.value.substring(start, textarea.selectionEnd) || 'ссылка';
+        const linkText = `[${selectedText}](${url})`;
+
+        textarea.value = textarea.value.substring(0, start) + linkText + textarea.value.substring(textarea.selectionEnd);
+        textarea.focus();
+        textarea.setSelectionRange(start + linkText.length, start + linkText.length);
+    }
+}
+
+function insertImage() {
+    const url = prompt('Введите URL изображения:', 'https://');
+    if (url) {
+        const textarea = document.getElementById('content');
+        const start = textarea.selectionStart;
+        const imageText = `![alt text](${url})`;
+
+        textarea.value = textarea.value.substring(0, start) + imageText + textarea.value.substring(textarea.selectionEnd);
+        textarea.focus();
+        textarea.setSelectionRange(start + imageText.length, start + imageText.length);
+    }
+}
+
+function insertCodeBlock() {
+    const textarea = document.getElementById('content');
+    const start = textarea.selectionStart;
+    const selectedText = textarea.value.substring(start, textarea.selectionEnd) || 'code';
+    const codeBlock = `\`\`\`\n${selectedText}\n\`\`\``;
+
+    textarea.value = textarea.value.substring(0, start) + codeBlock + textarea.value.substring(textarea.selectionEnd);
+    textarea.focus();
+    textarea.setSelectionRange(start + codeBlock.length, start + codeBlock.length);
+}
+
+// Теги
+const existingTags = {{ post.tags|map(attribute='tag.name')|list|tojson }};
+const tags = new Set(existingTags);
+const tagsContainer = document.getElementById('tagsContainer');
+const tagInput = document.getElementById('tagInput');
+const tagsHidden = document.getElementById('tagsHidden');
+
+tagInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' || e.key === ' ' || e.key === ',') {
+        e.preventDefault();
+        addTag();
+    }
+});
+
+tagInput.addEventListener('blur', function() {
+    addTag();
+});
+
+function addTag() {
+    let tag = tagInput.value.trim().toLowerCase();
+    if (tag && !tags.has(tag) && tags.size < 10) {
+        if (tag.length > 30) {
+            alert('Тег не может быть длиннее 30 символов');
+            tagInput.value = '';
+            return;
+        }
+
+        if (!/^[a-zа-яё0-9_\-]+$/i.test(tag)) {
+            alert('Тег может содержать только буквы, цифры, _ и -');
+            tagInput.value = '';
+            return;
+        }
+
+        tags.add(tag);
+        updateTagsDisplay();
+    }
+    tagInput.value = '';
+}
+
+function removeTag(tag) {
+    tags.delete(tag);
+    updateTagsDisplay();
+}
+
+function updateTagsDisplay() {
+    tagsContainer.innerHTML = '';
+    tags.forEach(tag => {
+        const tagElement = document.createElement('div');
+        tagElement.className = 'tag-input';
+        tagElement.innerHTML = `
+            #${tag}
+            <button type="button" onclick="removeTag('${tag}')">
+                <i class="fas fa-times"></i>
+            </button>
+        `;
+        tagsContainer.appendChild(tagElement);
+    });
+
+    tagsHidden.value = Array.from(tags).join(',');
+}
+
+// Инициализация тегов
+updateTagsDisplay();
+
+// Удаление поста
+function confirmDelete() {
+    if (confirm('Вы уверены, что хотите удалить этот пост? Это действие нельзя отменить.')) {
+        fetch('/post/{{ post.id }}/delete', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        }).then(response => response.json())
+          .then(data => {
+              if (data.success) {
+                  window.location.href = '/';
+              } else {
+                  alert('Ошибка при удалении поста');
+              }
+          });
+    }
+}
+
+// Валидация перед отправкой
+document.getElementById('editPostForm').addEventListener('submit', function(e) {
+    const title = document.getElementById('title').value.trim();
+    const content = document.getElementById('content').value.trim();
+
+    if (!title) {
+        e.preventDefault();
+        alert('Пожалуйста, введите заголовок');
+        return false;
+    }
+
+    if (title.length > 200) {
+        e.preventDefault();
+        alert('Заголовок не может быть длиннее 200 символов');
+        return false;
+    }
+
+    if (!content) {
+        e.preventDefault();
+        alert('Пожалуйста, введите содержание поста');
+        return false;
+    }
+
+    return true;
+});
+</script>
+{% endblock %}

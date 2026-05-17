@@ -700,6 +700,38 @@ def subscribe():
     return jsonify({'subscribed': subscribed})
 
 
+
+@app.route('/post/<int:post_id>/delete', methods=['POST'])
+@login_required
+def delete_post(post_id):
+    post = db.session.get(Post, post_id)
+    if not post or post.author_id != current_user.id:
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    db.session.delete(post)
+    db.session.commit()
+
+    return jsonify({'success': True})
+
+
+@app.route('/accept_answer/<int:answer_id>', methods=['POST'])
+@login_required
+def accept_answer(answer_id):
+    answer = db.session.get(Comment, answer_id)
+    if not answer or not answer.is_answer:
+        return jsonify({'error': 'Invalid answer'}), 400
+
+    question = db.session.get(Question, answer.question_id)
+    if not question or question.author_id != current_user.id:
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    question.accepted_answer_id = answer_id
+    question.is_resolved = True
+    db.session.commit()
+
+    return jsonify({'success': True})
+
+
 @app.route('/debug_session')
 @login_required
 def debug_session():

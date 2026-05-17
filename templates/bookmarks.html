@@ -1,0 +1,317 @@
+{% extends "base.html" %}
+
+{% block title %}Мои закладки — QArticle{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto">
+    <!-- Заголовок -->
+    <div class="bg-white rounded-xl shadow-sm p-6 mb-6">
+        <div class="flex items-center justify-between">
+            <div>
+                <h1 class="text-2xl font-bold text-gray-800 mb-1">
+                    <i class="fas fa-bookmark text-indigo-600"></i> Мои закладки
+                </h1>
+                <p class="text-gray-500">Сохраненные посты, которые вы хотите прочитать позже</p>
+            </div>
+            <div class="text-center bg-indigo-50 rounded-lg px-4 py-2">
+                <div class="text-2xl font-bold text-indigo-600">{{ bookmarks.total }}</div>
+                <div class="text-xs text-gray-500">сохранений</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Фильтры -->
+    <div class="bg-white rounded-xl shadow-sm p-4 mb-6">
+        <div class="flex flex-wrap gap-4">
+            <a href="{{ url_for('bookmarks') }}?filter=all"
+               class="px-4 py-2 rounded-lg text-sm font-medium {% if request.args.get('filter', 'all') == 'all' %}bg-indigo-600 text-white{% else %}text-gray-600 hover:bg-gray-100{% endif %}">
+                Все закладки
+            </a>
+            <a href="{{ url_for('bookmarks') }}?filter=article"
+               class="px-4 py-2 rounded-lg text-sm {% if request.args.get('filter') == 'article' %}bg-indigo-600 text-white{% else %}text-gray-600 hover:bg-gray-100{% endif %}">
+                <i class="fas fa-newspaper"></i> Статьи
+            </a>
+            <a href="{{ url_for('bookmarks') }}?filter=question"
+               class="px-4 py-2 rounded-lg text-sm {% if request.args.get('filter') == 'question' %}bg-indigo-600 text-white{% else %}text-gray-600 hover:bg-gray-100{% endif %}">
+                <i class="fas fa-question-circle"></i> Вопросы
+            </a>
+        </div>
+    </div>
+
+    <!-- Список закладок -->
+    {% if bookmarks.items %}
+    <div class="space-y-4">
+        {% for bookmark in bookmarks.items %}
+        <article class="bg-white rounded-xl shadow-sm hover:shadow-md transition p-5">
+            <div class="flex items-start justify-between">
+                <div class="flex-1">
+                    <div class="flex items-center gap-2 mb-2">
+                        <span class="text-xs px-2 py-1 rounded-full {% if bookmark.post.type == 'article' %}bg-blue-100 text-blue-700{% else %}bg-green-100 text-green-700{% endif %}">
+                            {{ 'Статья' if bookmark.post.type == 'article' else 'Вопрос' }}
+                        </span>
+                        <span class="text-xs text-gray-400">
+                            <i class="far fa-clock"></i> {{ bookmark.post.created_at.strftime('%d.%m.%Y %H:%M') }}
+                        </span>
+                        {% if bookmark.post.group %}
+                        <span class="text-xs text-gray-400">
+                            <i class="fas fa-users"></i> {{ bookmark.post.group.name }}
+                        </span>
+                        {% endif %}
+                        <span class="text-xs text-gray-400">
+                            <i class="fas fa-bookmark"></i> Сохранено: {{ bookmark.saved_at.strftime('%d.%m.%Y') }}
+                        </span>
+                    </div>
+
+                    <h2 class="text-xl font-bold mb-2">
+                        <a href="{{ url_for('post_detail', post_id=bookmark.post.id) }}" class="hover:text-indigo-600">
+                            {{ bookmark.post.title }}
+                        </a>
+                    </h2>
+
+                    <p class="text-gray-600 mb-3">{{ bookmark.post.content[:200] }}{% if bookmark.post.content|length > 200 %}...{% endif %}</p>
+
+                    <div class="flex flex-wrap items-center justify-between">
+                        <div class="flex items-center gap-4 text-sm text-gray-500">
+                            <div class="flex items-center gap-1">
+                                <img src="{{ bookmark.post.author.avatar_url }}" class="w-5 h-5 rounded-full">
+                                <a href="#" class="hover:text-indigo-600">{{ bookmark.post.author.username }}</a>
+                                <span class="text-xs text-gray-400">({{ bookmark.post.author.reputation }} реп.)</span>
+                            </div>
+                            <div class="flex items-center gap-1">
+                                <i class="far fa-thumbs-up"></i>
+                                <span>{{ bookmark.post.rating }}</span>
+                            </div>
+                            <div class="flex items-center gap-1">
+                                <i class="far fa-comment"></i>
+                                <span>{{ bookmark.post.comments|length }}</span>
+                            </div>
+                            <div class="flex items-center gap-1">
+                                <i class="far fa-eye"></i>
+                                <span>{{ bookmark.post.view_count }}</span>
+                            </div>
+                        </div>
+
+                        <div class="flex gap-2">
+                            {% if bookmark.post.tags %}
+                            <div class="flex flex-wrap gap-1">
+                                {% for post_tag in bookmark.post.tags[:2] %}
+                                <a href="{{ url_for('tag_posts', tag_name=post_tag.tag.name) }}"
+                                   class="text-xs bg-gray-100 hover:bg-indigo-100 text-gray-600 hover:text-indigo-600 px-2 py-1 rounded-full transition">
+                                    #{{ post_tag.tag.name }}
+                                </a>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+
+                            <button onclick="removeBookmark({{ bookmark.post.id }}, this)"
+                                    class="text-red-500 hover:text-red-700 transition text-sm flex items-center gap-1">
+                                <i class="fas fa-trash"></i> Удалить
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+
+    <!-- Пагинация -->
+    {% if bookmarks.pages > 1 %}
+    <div class="flex justify-center mt-8">
+        <nav class="inline-flex rounded-md shadow-sm">
+            {% if bookmarks.has_prev %}
+            <a href="{{ url_for('bookmarks', page=bookmarks.prev_num, filter=request.args.get('filter', 'all')) }}"
+               class="px-3 py-2 border rounded-l-md bg-white text-gray-500 hover:bg-gray-50">
+                <i class="fas fa-chevron-left"></i> Назад
+            </a>
+            {% endif %}
+
+            {% for page_num in bookmarks.iter_pages(left_edge=2, left_current=2, right_current=2, right_edge=2) %}
+                {% if page_num %}
+                    {% if page_num == bookmarks.page %}
+                    <span class="px-3 py-2 border-t border-b bg-indigo-600 text-white">{{ page_num }}</span>
+                    {% else %}
+                    <a href="{{ url_for('bookmarks', page=page_num, filter=request.args.get('filter', 'all')) }}"
+                       class="px-3 py-2 border-t border-b bg-white text-gray-700 hover:bg-gray-50">
+                        {{ page_num }}
+                    </a>
+                    {% endif %}
+                {% else %}
+                    <span class="px-3 py-2 border-t border-b bg-white text-gray-500">...</span>
+                {% endif %}
+            {% endfor %}
+
+            {% if bookmarks.has_next %}
+            <a href="{{ url_for('bookmarks', page=bookmarks.next_num, filter=request.args.get('filter', 'all')) }}"
+               class="px-3 py-2 border rounded-r-md bg-white text-gray-500 hover:bg-gray-50">
+                Вперёд <i class="fas fa-chevron-right"></i>
+            </a>
+            {% endif %}
+        </nav>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div class="bg-white rounded-xl shadow-sm p-12 text-center">
+        <i class="fas fa-bookmark text-gray-300 text-6xl mb-4"></i>
+        <h3 class="text-xl font-semibold text-gray-700 mb-2">У вас пока нет закладок</h3>
+        <p class="text-gray-500 mb-6">Сохраняйте интересные посты, чтобы не потерять их!</p>
+        <a href="{{ url_for('index') }}" class="inline-block bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700">
+            <i class="fas fa-search mr-2"></i> Изучить посты
+        </a>
+    </div>
+    {% endif %}
+
+    <!-- Статистика по тегам из закладок -->
+    {% if tag_stats %}
+    <div class="mt-8 bg-white rounded-xl shadow-sm p-6">
+        <h3 class="font-semibold text-gray-800 mb-3">
+            <i class="fas fa-chart-pie text-indigo-600"></i> Ваши любимые темы
+        </h3>
+        <div class="flex flex-wrap gap-3">
+            {% for stat in tag_stats[:15] %}
+            <a href="{{ url_for('tag_posts', tag_name=stat.name) }}"
+               class="inline-flex items-center gap-2 bg-gray-100 hover:bg-indigo-100 text-gray-700 hover:text-indigo-700 px-3 py-1 rounded-full text-sm transition">
+                #{{ stat.name }}
+                <span class="text-xs bg-white rounded-full px-2 py-0.5">{{ stat.count }}</span>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Экспорт закладок -->
+    <div class="mt-6 flex justify-end">
+        <button onclick="exportBookmarks()" class="text-sm text-gray-500 hover:text-indigo-600 transition">
+            <i class="fas fa-download"></i> Экспортировать закладки
+        </button>
+    </div>
+</div>
+
+<script>
+async function removeBookmark(postId, button) {
+    if (!confirm('Удалить пост из закладок?')) return;
+
+    try {
+        const response = await fetch(`/bookmark/${postId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+
+        const data = await response.json();
+        if (!data.bookmarked) {
+            // Удаляем карточку поста
+            const article = button.closest('article');
+            article.style.opacity = '0';
+            setTimeout(() => {
+                article.remove();
+                // проверка остались ли посты
+                if (document.querySelectorAll('article').length === 0) {
+                    location.reload();
+                }
+            }, 300);
+
+            showNotification('Пост удален из закладок', 'success');
+        }
+    } catch (error) {
+        console.error('Error removing bookmark:', error);
+        showNotification('Ошибка при удалении', 'error');
+    }
+}
+
+function exportBookmarks() {
+    const bookmarks = [];
+    document.querySelectorAll('article').forEach(article => {
+        const title = article.querySelector('h2 a')?.textContent || '';
+        const url = article.querySelector('h2 a')?.href || '';
+        if (title && url) {
+            bookmarks.push({ title, url });
+        }
+    });
+
+    if (bookmarks.length === 0) {
+        alert('Нет закладок для экспорта');
+        return;
+    }
+
+    // Создаем HTML для экспорта
+    let html = `<!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <title>Мои закладки QArticle</title>
+        <style>
+            body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+            h1 { color: #4f46e5; }
+            .bookmark { margin: 20px 0; padding: 15px; border: 1px solid #e2e8f0; border-radius: 8px; }
+            .title { font-size: 18px; font-weight: bold; margin-bottom: 5px; }
+            .title a { color: #1e293b; text-decoration: none; }
+            .title a:hover { color: #4f46e5; }
+            .date { color: #64748b; font-size: 12px; margin-top: 10px; }
+        </style>
+    </head>
+    <body>
+        <h1>Мои закладки QArticle</h1>
+        <p>Экспортировано: ${new Date().toLocaleString()}</p>
+        <p>Всего сохранений: ${bookmarks.length}</p>
+        <hr>
+    `;
+
+    bookmarks.forEach(bookmark => {
+        html += `
+        <div class="bookmark">
+            <div class="title">
+                <a href="${bookmark.url}" target="_blank">${bookmark.title}</a>
+            </div>
+            <div class="date">
+                <a href="${bookmark.url}" style="color: #64748b;">${bookmark.url}</a>
+            </div>
+        </div>
+        `;
+    });
+
+    html += `
+    </body>
+    </html>`;
+
+    // Скачать файл
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `qarticle_bookmarks_${new Date().toISOString().split('T')[0]}.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    showNotification('Закладки экспортированы', 'success');
+}
+
+function showNotification(message, type) {
+    const colors = {
+        success: 'bg-green-500',
+        error: 'bg-red-500',
+        info: 'bg-blue-500'
+    };
+
+    const notification = document.createElement('div');
+    notification.className = `fixed bottom-4 right-4 ${colors[type]} text-white px-6 py-3 rounded-lg shadow-lg z-50 transition-opacity duration-300`;
+    notification.innerHTML = `
+        <div class="flex items-center gap-2">
+            <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'}"></i>
+            <span>${message}</span>
+        </div>
+    `;
+
+    document.body.appendChild(notification);
+
+    setTimeout(() => {
+        notification.style.opacity = '0';
+        setTimeout(() => notification.remove(), 300);
+    }, 3000);
+}
+</script>
+{% endblock %}

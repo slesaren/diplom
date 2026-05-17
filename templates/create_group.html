@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+
+{% block title %}Создать сообщество — QArticle{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+        <div class="bg-gradient-to-r from-indigo-500 to-purple-600 px-6 py-8">
+            <h1 class="text-2xl font-bold text-white">Создать новое сообщество</h1>
+            <p class="text-indigo-100 mt-1">Объединяйте людей по интересам</p>
+        </div>
+
+        <!-- Форма -->
+        <form method="POST" action="{{ url_for('create_group') }}" class="p-6" id="createGroupForm">
+            <!-- Название группы -->
+            <div class="mb-6">
+                <label for="name" class="block text-sm font-medium text-gray-700 mb-2">
+                    <i class="fas fa-tag"></i> Название сообщества <span class="text-red-500">*</span>
+                </label>
+                <input type="text" id="name" name="name" required
+                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                       placeholder="Например: Python Developers, Data Science Community">
+                <div class="text-xs text-gray-400 mt-1" id="nameCounter">0 / 100</div>
+                <div class="text-xs text-gray-400 mt-1">
+                    <i class="fas fa-info-circle"></i> Название должно быть уникальным и отражать тему сообщества
+                </div>
+            </div>
+
+            <div class="mb-6">
+                <label for="description" class="block text-sm font-medium text-gray-700 mb-2">
+                    <i class="fas fa-align-left"></i> Описание
+                </label>
+                <textarea id="description" name="description" rows="5"
+                          class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                          placeholder="Расскажите о целях и правилах сообщества..."></textarea>
+                <div class="text-xs text-gray-400 mt-1" id="descCounter">0 / 500</div>
+            </div>
+
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-3">
+                    <i class="fas fa-lock"></i> Тип сообщества
+                </label>
+                <div class="space-y-3">
+                    <label class="flex items-start cursor-pointer p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition">
+                        <input type="radio" name="is_private" value="false" checked class="mt-1 mr-3">
+                        <div>
+                            <div class="font-medium text-gray-800">
+                                <i class="fas fa-globe text-green-600 mr-1"></i> Публичное
+                            </div>
+                            <div class="text-sm text-gray-500">
+                                Любой пользователь может видеть посты и присоединиться без приглашения
+                            </div>
+                        </div>
+                    </label>
+
+                    <label class="flex items-start cursor-pointer p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition">
+                        <input type="radio" name="is_private" value="true" class="mt-1 mr-3">
+                        <div>
+                            <div class="font-medium text-gray-800">
+                                <i class="fas fa-lock text-red-600 mr-1"></i> Приватное
+                            </div>
+                            <div class="text-sm text-gray-500">
+                                Только участники могут видеть посты. Присоединение по приглашению или запросу
+                            </div>
+                        </div>
+                    </label>
+                </div>
+            </div>
+
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">
+                    <i class="fas fa-gavel"></i> Правила сообщества (опционально)
+                </label>
+                <textarea name="rules" rows="4"
+                          class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                          placeholder="Установите правила поведения в сообществе..."></textarea>
+                <div class="text-xs text-gray-400 mt-1">
+                    <i class="fas fa-info-circle"></i> Правила помогут поддерживать порядок в сообществе
+                </div>
+            </div>
+
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">
+                    <i class="fas fa-tags"></i> Теги сообщества
+                </label>
+                <div class="border border-gray-300 rounded-lg p-2 focus-within:ring-2 focus-within:ring-indigo-500">
+                    <div id="tagsContainer" class="flex flex-wrap gap-1 mb-2"></div>
+                    <input type="text" id="tagInput" class="w-full px-2 py-1 outline-none"
+                           placeholder="Введите тег и нажмите Enter (например: python, data-science, ai)">
+                </div>
+                <input type="hidden" name="tags" id="tagsHidden">
+                <p class="text-xs text-gray-400 mt-1">
+                    <i class="fas fa-info-circle"></i> Теги помогут пользователям найти ваше сообщество
+                </p>
+            </div>
+
+            <div class="flex justify-end gap-3 pt-4 border-t">
+                <a href="{{ url_for('groups') }}" class="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition">
+                    Отмена
+                </a>
+                <button type="submit" class="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">
+                    <i class="fas fa-plus-circle mr-2"></i> Создать сообщество
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <div class="mt-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <h3 class="font-semibold text-blue-800 mb-2">
+            <i class="fas fa-lightbulb"></i> Советы по созданию сообщества
+        </h3>
+        <div class="text-sm text-blue-700 space-y-1">
+            <p>✓ Выберите понятное и запоминающееся название</p>
+            <p>✓ Опишите цели и тематику сообщества в деталях</p>
+            <p>✓ Установите четкие правила для участников</p>
+            <p>✓ Добавьте релевантные теги для лучшего поиска</p>
+            <p>✓ Будьте активны и создавайте интересный контент</p>
+        </div>
+    </div>
+</div>
+
+<script>
+// Счетчики символов
+const nameInput = document.getElementById('name');
+const nameCounter = document.getElementById('nameCounter');
+const descInput = document.getElementById('description');
+const descCounter = document.getElementById('descCounter');
+
+nameInput.addEventListener('input', function() {
+    const count = this.value.length;
+    nameCounter.textContent = `${count} / 100`;
+    if (count > 100) {
+        nameCounter.classList.add('text-red-500');
+    } else {
+        nameCounter.classList.remove('text-red-500');
+    }
+});
+
+descInput.addEventListener('input', function() {
+    const count = this.value.length;
+    descCounter.textContent = `${count} / 500`;
+    if (count > 500) {
+        descCounter.classList.add('text-red-500');
+    } else {
+        descCounter.classList.remove('text-red-500');
+    }
+});
+
+// Теги
+const tags = new Set();
+const tagsContainer = document.getElementById('tagsContainer');
+const tagInput = document.getElementById('tagInput');
+const tagsHidden = document.getElementById('tagsHidden');
+
+tagInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        addTag();
+    }
+});
+
+function addTag() {
+    let tag = tagInput.value.trim().toLowerCase();
+    if (tag && !tags.has(tag) && tags.size < 10) {
+        if (tag.length > 30) {
+            alert('Тег не может быть длиннее 30 символов');
+            tagInput.value = '';
+            return;
+        }
+
+        if (!/^[a-zа-яё0-9_\-]+$/i.test(tag)) {
+            alert('Тег может содержать только буквы, цифры, _ и -');
+            tagInput.value = '';
+            return;
+        }
+
+        tags.add(tag);
+        updateTagsDisplay();
+    }
+    tagInput.value = '';
+}
+
+function removeTag(tag) {
+    tags.delete(tag);
+    updateTagsDisplay();
+}
+
+function updateTagsDisplay() {
+    tagsContainer.innerHTML = '';
+    tags.forEach(tag => {
+        const tagElement = document.createElement('div');
+        tagElement.className = 'tag-input';
+        tagElement.innerHTML = `
+            #${tag}
+            <button type="button" onclick="removeTag('${tag}')">
+                <i class="fas fa-times"></i>
+            </button>
+        `;
+        tagsContainer.appendChild(tagElement);
+    });
+
+    tagsHidden.value = Array.from(tags).join(',');
+}
+
+// Валидация
+document.getElementById('createGroupForm').addEventListener('submit', function(e) {
+    const name = document.getElementById('name').value.trim();
+
+    if (!name) {
+        e.preventDefault();
+        alert('Пожалуйста, введите название сообщества');
+        return false;
+    }
+
+    if (name.length < 3) {
+        e.preventDefault();
+        alert('Название сообщества должно содержать минимум 3 символа');
+        return false;
+    }
+
+    if (name.length > 100) {
+        e.preventDefault();
+        alert('Название сообщества не может быть длиннее 100 символов');
+        return false;
+    }
+
+    return true;
+});
+</script>
+
+<style>
+.tag-input {
+    display: inline-flex;
+    align-items: center;
+    background: #e0e7ff;
+    color: #3730a3;
+    padding: 0.25rem 0.5rem;
+    border-radius: 9999px;
+    font-size: 0.875rem;
+    margin: 0.25rem;
+}
+.tag-input button {
+    margin-left: 0.5rem;
+    color: #6366f1;
+    cursor: pointer;
+}
+.tag-input button:hover {
+    color: #4f46e5;
+}
+</style>
+{% endblock %}
