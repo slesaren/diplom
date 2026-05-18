@@ -29,7 +29,10 @@
                     <div class="flex items-center space-x-2 text-sm text-gray-500">
                         <img src="{{ post.author.avatar_url if post.author.avatar_url else 'https://randomuser.me/api/portraits/men/32.jpg' }}"
                              class="w-6 h-6 rounded-full">
-                        <span class="font-medium text-gray-800">{{ post.author.username }}</span>
+                        <!-- <span class="font-medium text-gray-800">{{ post.author.username }}</span> -->
+                        <a href="{{ url_for('user_profile', username=post.author.username) }}" class="font-medium text-gray-800 hover:text-indigo-600">
+    {{ post.author.username }}
+</a>
                         <span>·</span>
                         <span><i class="far fa-clock"></i> {{ post.created_at.strftime('%d.%m.%Y %H:%M') }}</span>
                         <span class="{% if post.type == 'article' %}bg-blue-100 text-blue-700{% else %}bg-green-100 text-green-700{% endif %} text-xs px-2 py-0.5 rounded-full">
@@ -79,10 +82,13 @@
                     </div>
                     <div class="flex flex-wrap gap-1">
                         {% for post_tag in post.tags[:3] %}
-                        <a href="{{ url_for('tag_posts', tag_name=post_tag.tag.name) }}"
+                       <!-- <a href="{{ url_for('tag_posts', tag_name=post_tag.tag.name) }}"
                            class="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded-full hover:bg-indigo-100 hover:text-indigo-700">
                             #{{ post_tag.tag.name }}
-                        </a>
+                        </a>-->
+                        <a href="{{ url_for('user_profile', username=post.comments[-1].author.username) }}" class="font-semibold hover:text-indigo-600">
+    {{ post.comments[-1].author.username }}
+</a>
                         {% endfor %}
                     </div>
                 </div>

@@ -137,7 +137,8 @@
                             </h3>
                             <p class="text-gray-600 text-sm mb-2">{{ post.content[:150] }}{% if post.content|length > 150 %}...{% endif %}</p>
                             <div class="flex items-center gap-4 text-sm text-gray-400">
-                                <span><i class="far fa-user"></i> {{ post.author.username }}</span>
+                                <!-- <span><i class="far fa-user"></i> {{ post.author.username }}</span>  -->
+                                <span><i class="far fa-user"></i> <a href="{{ url_for('user_profile', username=post.author.username) }}" class="hover:text-indigo-600">{{ post.author.username }}</a></span>
                                 <span><i class="far fa-thumbs-up"></i> {{ post.rating }}</span>
                                 <span><i class="far fa-comment"></i> {{ post.comments|length }}</span>
                                 <span><i class="far fa-eye"></i> {{ post.view_count }}</span>
@@ -168,7 +169,12 @@
                     <div class="flex items-center gap-3">
                         <img src="{{ membership.user.avatar_url }}" class="w-10 h-10 rounded-full">
                         <div>
-                            <div class="font-semibold text-gray-800">{{ membership.user.username }}</div>
+                            <!-- <div class="font-semibold text-gray-800">{{ membership.user.username }}</div>-->
+                            <div class="font-semibold text-gray-800">
+    <a href="{{ url_for('user_profile', username=membership.user.username) }}" class="hover:text-indigo-600">
+        {{ membership.user.username }}
+    </a>
+</div>
                             <div class="text-xs text-gray-400">Рейтинг: {{ membership.user.reputation }}</div>
                         </div>
                     </div>

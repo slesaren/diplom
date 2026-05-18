@@ -241,6 +241,9 @@ def logout():
 @app.route('/user/<string:username>')
 def user_profile(username):
     user = User.query.filter_by(username=username).first_or_404()
+    if current_user.is_authenticated and user.id == current_user.id:
+        return redirect(url_for('profile'))
+    user = User.query.filter_by(username=username).first_or_404()
 
     articles = Article.query.filter_by(author_id=user.id, status='published').order_by(Article.created_at.desc()).all()
     questions = Question.query.filter_by(author_id=user.id, status='published').order_by(

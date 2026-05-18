@@ -19,6 +19,7 @@
     .content-html {
         font-size: 1.125rem;
         line-height: 1.75;
+        max-width: 100%;
     }
     .content-html h1 {
         font-size: 2rem;
@@ -216,7 +217,11 @@
                     <div class="flex items-center space-x-3">
                         <img src="{{ answer.author.avatar_url }}" class="w-8 h-8 rounded-full">
                         <div>
-                            <div class="font-semibold text-gray-800">{{ answer.author.username }}</div>
+                            <div class="font-semibold text-gray-800">
+                                <a href="{{ url_for('user_profile', username=answer.author.username) }}" class="hover:text-indigo-600">
+                                    {{ answer.author.username }}
+                                </a>
+                            </div>
                             <div class="text-xs text-gray-400">{{ answer.created_at.strftime('%d.%m.%Y %H:%M') }}</div>
                         </div>
                     </div>
@@ -281,7 +286,11 @@
                         <div class="flex items-start justify-between">
                             <div class="flex items-center space-x-2">
                                 <img src="{{ reply.author.avatar_url }}" class="w-5 h-5 rounded-full">
-                                <span class="font-semibold text-sm">{{ reply.author.username }}</span>
+                                <span class="font-semibold text-sm">
+                                    <a href="{{ url_for('user_profile', username=reply.author.username) }}" class="hover:text-indigo-600">
+                                        {{ reply.author.username }}
+                                    </a>
+                                </span>
                                 <span class="text-xs text-gray-400">{{ reply.created_at.strftime('%d.%m.%Y %H:%M') }}</span>
                             </div>
                             <div class="flex items-center space-x-1">
@@ -322,7 +331,11 @@
                     <div class="flex items-center space-x-3">
                         <img src="{{ comment.author.avatar_url }}" class="w-8 h-8 rounded-full">
                         <div>
-                            <div class="font-semibold text-gray-800">{{ comment.author.username }}</div>
+                            <div class="font-semibold text-gray-800">
+                                <a href="{{ url_for('user_profile', username=comment.author.username) }}" class="hover:text-indigo-600">
+                                    {{ comment.author.username }}
+                                </a>
+                            </div>
                             <div class="text-xs text-gray-400">{{ comment.created_at.strftime('%d.%m.%Y %H:%M') }}</div>
                         </div>
                     </div>
@@ -373,7 +386,11 @@
                         <div class="flex items-start justify-between">
                             <div class="flex items-center space-x-2">
                                 <img src="{{ reply.author.avatar_url }}" class="w-5 h-5 rounded-full">
-                                <span class="font-semibold text-sm">{{ reply.author.username }}</span>
+                                <span class="font-semibold text-sm">
+                                    <a href="{{ url_for('user_profile', username=reply.author.username) }}" class="hover:text-indigo-600">
+                                        {{ reply.author.username }}
+                                    </a>
+                                </span>
                                 <span class="text-xs text-gray-400">{{ reply.created_at.strftime('%d.%m.%Y %H:%M') }}</span>
                             </div>
                             <div class="flex items-center space-x-1">
@@ -434,7 +451,11 @@
             <div class="flex items-center space-x-3 mb-3">
                 <img src="{{ post.author.avatar_url }}" class="w-12 h-12 rounded-full">
                 <div>
-                    <div class="font-semibold">{{ post.author.username }}</div>
+                    <div class="font-semibold">
+                        <a href="{{ url_for('user_profile', username=post.author.username) }}" class="hover:text-indigo-600">
+                            {{ post.author.username }}
+                        </a>
+                    </div>
                     <div class="text-sm text-gray-500">Рейтинг: {{ post.author.reputation }}</div>
                 </div>
             </div>
