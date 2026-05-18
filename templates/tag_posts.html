@@ -102,7 +102,10 @@
                         <div class="flex items-center gap-4 text-sm text-gray-500">
                             <div class="flex items-center gap-1">
                                 <img src="{{ post.author.avatar_url }}" class="w-5 h-5 rounded-full">
-                                <a href="#" class="hover:text-indigo-600">{{ post.author.username }}</a>
+                                <!-- <a href="#" class="hover:text-indigo-600">{{ post.author.username }}</a> -->
+                                <a href="{{ url_for('user_profile', username=post.author.username) }}" class="hover:text-indigo-600">
+    {{ post.author.username }}
+</a>
                             </div>
                             <div class="flex items-center gap-1">
                                 <i class="far fa-thumbs-up"></i>

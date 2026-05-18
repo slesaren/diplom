@@ -2,6 +2,8 @@
 
 {% block title %}{{ post.title }} — QArticle{% endblock %}
 
+{% set full_width_content = true %}
+
 {% block extra_css %}
 <style>
     .comment-tree {
@@ -59,6 +61,22 @@
         margin: 1rem 0;
         color: #475569;
         font-style: italic;
+    }
+    .comment-actions {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+    }
+    .comment-actions button, .comment-actions a {
+        font-size: 0.75rem;
+        color: #9ca3af;
+        transition: color 0.2s;
+    }
+    .comment-actions button:hover, .comment-actions a:hover {
+        color: #4f46e5;
+    }
+    .comment-actions .delete-btn:hover {
+        color: #ef4444;
     }
 </style>
 {% endblock %}
@@ -222,7 +240,12 @@
                                     {{ answer.author.username }}
                                 </a>
                             </div>
-                            <div class="text-xs text-gray-400">{{ answer.created_at.strftime('%d.%m.%Y %H:%M') }}</div>
+                            <div class="text-xs text-gray-400">
+                                {{ answer.created_at.strftime('%d.%m.%Y %H:%M') }}
+                                {% if answer.updated_at and answer.updated_at != answer.created_at %}
+                                <span class="text-gray-400 ml-1">(ред.)</span>
+                                {% endif %}
+                            </div>
                         </div>
                     </div>
                     <div class="flex items-center gap-3">
@@ -254,6 +277,17 @@
                             <i class="fas fa-check-circle"></i> Принятый ответ
                         </span>
                         {% endif %}
+                        <!-- Кнопки для автора ответа -->
+                        {% if current_user.id == answer.author_id %}
+                        <div class="comment-actions">
+                            <a href="{{ url_for('edit_comment', comment_id=answer.id) }}" class="edit-btn">
+                                <i class="fas fa-pen"></i>
+                            </a>
+                            <button onclick="deleteComment({{ answer.id }})" class="delete-btn">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                        {% endif %}
                     </div>
                 </div>
                 <div class="text-gray-700">{{ answer.content|safe }}</div>
@@ -278,7 +312,7 @@
                     </form>
                 </div>
 
-                <!-- Вложенные комментарии -->
+                <!-- Вложенные комментарии к ответам -->
                 {% if answer.replies %}
                 <div class="mt-4 comment-tree">
                     {% for reply in answer.replies %}
@@ -291,24 +325,41 @@
                                         {{ reply.author.username }}
                                     </a>
                                 </span>
-                                <span class="text-xs text-gray-400">{{ reply.created_at.strftime('%d.%m.%Y %H:%M') }}</span>
+                                <span class="text-xs text-gray-400">
+                                    {{ reply.created_at.strftime('%d.%m.%Y %H:%M') }}
+                                    {% if reply.updated_at and reply.updated_at != reply.created_at %}
+                                    <span class="text-gray-400">(ред.)</span>
+                                    {% endif %}
+                                </span>
                             </div>
-                            <div class="flex items-center space-x-1">
-                                <button class="vote-up-btn text-xs flex items-center gap-1 hover:text-green-600 transition
-                                               {% if reply_user_votes[reply.id] == 1 %}text-green-600{% else %}text-gray-500{% endif %}"
-                                        data-target-type="comment"
-                                        data-target-id="{{ reply.id }}"
-                                        data-value="1">
-                                    <i class="fas fa-thumbs-up"></i>
-                                </button>
-                                <span class="vote-count text-sm">{{ reply.rating }}</span>
-                                <button class="vote-down-btn text-xs flex items-center gap-1 hover:text-red-600 transition
-                                               {% if reply_user_votes[reply.id] == -1 %}text-red-600{% else %}text-gray-500{% endif %}"
-                                        data-target-type="comment"
-                                        data-target-id="{{ reply.id }}"
-                                        data-value="-1">
-                                    <i class="fas fa-thumbs-down"></i>
-                                </button>
+                            <div class="flex items-center gap-2">
+                                <div class="flex items-center space-x-1">
+                                    <button class="vote-up-btn text-xs flex items-center gap-1 hover:text-green-600 transition
+                                                   {% if reply_user_votes[reply.id] == 1 %}text-green-600{% else %}text-gray-500{% endif %}"
+                                            data-target-type="comment"
+                                            data-target-id="{{ reply.id }}"
+                                            data-value="1">
+                                        <i class="fas fa-thumbs-up"></i>
+                                    </button>
+                                    <span class="vote-count text-sm">{{ reply.rating }}</span>
+                                    <button class="vote-down-btn text-xs flex items-center gap-1 hover:text-red-600 transition
+                                                   {% if reply_user_votes[reply.id] == -1 %}text-red-600{% else %}text-gray-500{% endif %}"
+                                            data-target-type="comment"
+                                            data-target-id="{{ reply.id }}"
+                                            data-value="-1">
+                                        <i class="fas fa-thumbs-down"></i>
+                                    </button>
+                                </div>
+                                {% if current_user.id == reply.author_id %}
+                                <div class="comment-actions">
+                                    <a href="{{ url_for('edit_comment', comment_id=reply.id) }}" class="edit-btn">
+                                        <i class="fas fa-pen"></i>
+                                    </a>
+                                    <button onclick="deleteComment({{ reply.id }})" class="delete-btn">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                                {% endif %}
                             </div>
                         </div>
                         <div class="text-sm text-gray-700 mt-1">{{ reply.content }}</div>
@@ -336,25 +387,42 @@
                                     {{ comment.author.username }}
                                 </a>
                             </div>
-                            <div class="text-xs text-gray-400">{{ comment.created_at.strftime('%d.%m.%Y %H:%M') }}</div>
+                            <div class="text-xs text-gray-400">
+                                {{ comment.created_at.strftime('%d.%m.%Y %H:%M') }}
+                                {% if comment.updated_at and comment.updated_at != comment.created_at %}
+                                <span class="text-gray-400 ml-1">(ред.)</span>
+                                {% endif %}
+                            </div>
                         </div>
                     </div>
-                    <div class="flex items-center space-x-1">
-                        <button class="vote-up-btn flex items-center justify-center w-8 h-8 rounded-full hover:bg-green-100 transition
-                                       {% if comment_user_votes[comment.id] == 1 %}text-green-600 bg-green-100{% else %}text-gray-500{% endif %}"
-                                data-target-type="comment"
-                                data-target-id="{{ comment.id }}"
-                                data-value="1">
-                            <i class="fas fa-thumbs-up"></i>
-                        </button>
-                        <span class="vote-count font-semibold min-w-[2rem] text-center">{{ comment.rating }}</span>
-                        <button class="vote-down-btn flex items-center justify-center w-8 h-8 rounded-full hover:bg-red-100 transition
-                                       {% if comment_user_votes[comment.id] == -1 %}text-red-600 bg-red-100{% else %}text-gray-500{% endif %}"
-                                data-target-type="comment"
-                                data-target-id="{{ comment.id }}"
-                                data-value="-1">
-                            <i class="fas fa-thumbs-down"></i>
-                        </button>
+                    <div class="flex items-center gap-2">
+                        <div class="flex items-center space-x-1">
+                            <button class="vote-up-btn flex items-center justify-center w-8 h-8 rounded-full hover:bg-green-100 transition
+                                           {% if comment_user_votes[comment.id] == 1 %}text-green-600 bg-green-100{% else %}text-gray-500{% endif %}"
+                                    data-target-type="comment"
+                                    data-target-id="{{ comment.id }}"
+                                    data-value="1">
+                                <i class="fas fa-thumbs-up"></i>
+                            </button>
+                            <span class="vote-count font-semibold min-w-[2rem] text-center">{{ comment.rating }}</span>
+                            <button class="vote-down-btn flex items-center justify-center w-8 h-8 rounded-full hover:bg-red-100 transition
+                                           {% if comment_user_votes[comment.id] == -1 %}text-red-600 bg-red-100{% else %}text-gray-500{% endif %}"
+                                    data-target-type="comment"
+                                    data-target-id="{{ comment.id }}"
+                                    data-value="-1">
+                                <i class="fas fa-thumbs-down"></i>
+                            </button>
+                        </div>
+                        {% if current_user.id == comment.author_id %}
+                        <div class="comment-actions">
+                            <a href="{{ url_for('edit_comment', comment_id=comment.id) }}" class="edit-btn">
+                                <i class="fas fa-pen"></i>
+                            </a>
+                            <button onclick="deleteComment({{ comment.id }})" class="delete-btn">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                        {% endif %}
                     </div>
                 </div>
                 <div class="text-gray-700">{{ comment.content|safe }}</div>
@@ -391,24 +459,41 @@
                                         {{ reply.author.username }}
                                     </a>
                                 </span>
-                                <span class="text-xs text-gray-400">{{ reply.created_at.strftime('%d.%m.%Y %H:%M') }}</span>
+                                <span class="text-xs text-gray-400">
+                                    {{ reply.created_at.strftime('%d.%m.%Y %H:%M') }}
+                                    {% if reply.updated_at and reply.updated_at != reply.created_at %}
+                                    <span class="text-gray-400">(ред.)</span>
+                                    {% endif %}
+                                </span>
                             </div>
-                            <div class="flex items-center space-x-1">
-                                <button class="vote-up-btn text-xs flex items-center gap-1 hover:text-green-600 transition
-                                               {% if reply_user_votes[reply.id] == 1 %}text-green-600{% else %}text-gray-500{% endif %}"
-                                        data-target-type="comment"
-                                        data-target-id="{{ reply.id }}"
-                                        data-value="1">
-                                    <i class="fas fa-thumbs-up"></i>
-                                </button>
-                                <span class="vote-count text-sm">{{ reply.rating }}</span>
-                                <button class="vote-down-btn text-xs flex items-center gap-1 hover:text-red-600 transition
-                                               {% if reply_user_votes[reply.id] == -1 %}text-red-600{% else %}text-gray-500{% endif %}"
-                                        data-target-type="comment"
-                                        data-target-id="{{ reply.id }}"
-                                        data-value="-1">
-                                    <i class="fas fa-thumbs-down"></i>
-                                </button>
+                            <div class="flex items-center gap-2">
+                                <div class="flex items-center space-x-1">
+                                    <button class="vote-up-btn text-xs flex items-center gap-1 hover:text-green-600 transition
+                                                   {% if reply_user_votes[reply.id] == 1 %}text-green-600{% else %}text-gray-500{% endif %}"
+                                            data-target-type="comment"
+                                            data-target-id="{{ reply.id }}"
+                                            data-value="1">
+                                        <i class="fas fa-thumbs-up"></i>
+                                    </button>
+                                    <span class="vote-count text-sm">{{ reply.rating }}</span>
+                                    <button class="vote-down-btn text-xs flex items-center gap-1 hover:text-red-600 transition
+                                                   {% if reply_user_votes[reply.id] == -1 %}text-red-600{% else %}text-gray-500{% endif %}"
+                                            data-target-type="comment"
+                                            data-target-id="{{ reply.id }}"
+                                            data-value="-1">
+                                        <i class="fas fa-thumbs-down"></i>
+                                    </button>
+                                </div>
+                                {% if current_user.id == reply.author_id %}
+                                <div class="comment-actions">
+                                    <a href="{{ url_for('edit_comment', comment_id=reply.id) }}" class="edit-btn">
+                                        <i class="fas fa-pen"></i>
+                                    </a>
+                                    <button onclick="deleteComment({{ reply.id }})" class="delete-btn">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                                {% endif %}
                             </div>
                         </div>
                         <div class="text-sm text-gray-700 mt-1">{{ reply.content }}</div>
@@ -526,7 +611,6 @@ document.querySelectorAll('.vote-up-btn, .vote-down-btn').forEach(btn => {
         const upBtn = parentDiv.querySelector('.vote-up-btn');
         const downBtn = parentDiv.querySelector('.vote-down-btn');
 
-        // Блокируем кнопку на время запроса
         this.style.opacity = '0.5';
         this.disabled = true;
 
@@ -546,10 +630,8 @@ document.querySelectorAll('.vote-up-btn, .vote-down-btn').forEach(btn => {
             const data = await response.json();
 
             if (data.success) {
-                // Обновляем счетчик
                 voteCountSpan.textContent = data.new_rating;
 
-                // Обновляем стили кнопок
                 if (data.user_vote === 1) {
                     upBtn.classList.add('text-green-600', 'bg-green-100');
                     upBtn.classList.remove('text-gray-500');
@@ -567,7 +649,6 @@ document.querySelectorAll('.vote-up-btn, .vote-down-btn').forEach(btn => {
                     downBtn.classList.add('text-gray-500');
                 }
 
-                // уведомление
                 showToast(data.user_vote !== 0 ? 'Голос учтен' : 'Голос отменен', 'success');
             } else if (data.error === 'You cannot vote on your own content') {
                 showToast('Нельзя голосовать за свои посты', 'error');
@@ -639,6 +720,30 @@ function hideReplyForm(commentId) {
     const form = document.getElementById(`reply-form-${commentId}`);
     if (form) {
         form.classList.add('hidden');
+    }
+}
+
+// Удалить комментарий
+async function deleteComment(commentId) {
+    if (!confirm('Удалить этот комментарий? Действие нельзя отменить.')) return;
+
+    try {
+        const response = await fetch(`/comment/${commentId}/delete`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+
+        if (response.ok) {
+            showToast('Комментарий удалён', 'success');
+            setTimeout(() => location.reload(), 500);
+        } else {
+            showToast('Ошибка при удалении', 'error');
+        }
+    } catch (error) {
+        console.error('Error deleting comment:', error);
+        showToast('Ошибка при удалении', 'error');
     }
 }
 

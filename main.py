@@ -310,7 +310,6 @@ def profile():
     active_tab = request.args.get('tab', 'articles')
     bookmarked_posts = Bookmark.query.filter_by(user_id=current_user.id).all()
 
-    # Проверить подписку если просматриваем чужой профиль
     is_subscribed = False
     #  добавить логику подписки
 
@@ -421,7 +420,6 @@ def group_detail(group_id):
     if not group:
         abort(404)
 
-    # Проверка доступа к приватной группе
     if group.is_private and not current_user.is_authenticated:
         flash('Это приватное сообщество. Войдите для доступа.', 'warning')
         return redirect(url_for('login'))
@@ -500,25 +498,21 @@ def post_detail(post_id):
     if not post:
         abort(404)
 
-    # Увеличиваем счетчик просмотров
     post.view_count += 1
     db.session.commit()
 
     comments = Comment.query.filter_by(post_id=post_id, parent_comment_id=None).order_by(Comment.created_at).all()
 
-    # Для вопроса - отдельно получаем ответы
     answers = []
     if post.type == 'question':
         answers = Comment.query.filter_by(question_id=post_id, is_answer=True).order_by(Comment.rating.desc()).all()
 
-    # Получаем голоса текущего пользователя
     post_user_vote = 0
     comment_user_votes = {}
     answer_user_votes = {}
     reply_user_votes = {}
 
     if current_user.is_authenticated:
-        # Голос за пост
         post_vote = Vote.query.filter_by(
             user_id=current_user.id,
             target_type='post',
@@ -526,7 +520,6 @@ def post_detail(post_id):
         ).first()
         post_user_vote = post_vote.value if post_vote else 0
 
-        # Голоса за комментарии в статье
         for comment in comments:
             vote = Vote.query.filter_by(
                 user_id=current_user.id,
@@ -543,7 +536,6 @@ def post_detail(post_id):
                 ).first()
                 reply_user_votes[reply.id] = reply_vote.value if reply_vote else 0
 
-        # Голоса за ответы на вопросы
         for answer in answers:
             vote = Vote.query.filter_by(
                 user_id=current_user.id,
@@ -560,7 +552,6 @@ def post_detail(post_id):
                 ).first()
                 reply_user_votes[reply.id] = reply_vote.value if reply_vote else 0
 
-    # Похожие посты
     similar_posts = []
     if post.tags:
         tag_ids = [pt.tag_id for pt in post.tags]
@@ -570,7 +561,6 @@ def post_detail(post_id):
             Post.status == 'published'
         ).distinct().limit(5).all()
 
-    # Проверка подписки на автора
     is_subscribed = False
     if current_user.is_authenticated and post.author.id != current_user.id:
         sub = Subscription.query.filter_by(
@@ -596,23 +586,7 @@ def post_detail(post_id):
                            is_subscribed=is_subscribed,
                            bookmarked_post_ids=bookmarked_post_ids)
 
-'''
-@app.route('/post/<int:post_id>')
-def post_detail(post_id):
-    post = db.session.get(Post, post_id)
-    if not post:
-        abort(404)
 
-    post.view_count += 1
-    db.session.commit()
-
-    comments = Comment.query.filter_by(post_id=post_id, parent_comment_id=None).order_by(Comment.created_at).all()
-    answers = []
-    if post.type == 'question':
-        answers = Comment.query.filter_by(question_id=post_id, is_answer=True).order_by(Comment.rating.desc()).all()
-
-    return render_template('post_detail.html', post=post, comments=comments, answers=answers)
-'''
 
 @app.route('/create', methods=['GET', 'POST'])
 @login_required
@@ -726,6 +700,27 @@ def add_comment(post_id):
     flash('Комментарий добавлен', 'success')
     return redirect(url_for('post_detail', post_id=post_id))
 
+@app.route('/comment/<int:comment_id>/edit', methods=['GET', 'POST'])
+@login_required
+def edit_comment(comment_id):
+    comment = db.session.get(Comment, comment_id)
+    if not comment or comment.author_id != current_user.id:
+        abort(404)
+
+    if request.method == 'POST':
+        new_content = request.form.get('content', '').strip()
+        if not new_content:
+            flash('Комментарий не может быть пустым', 'danger')
+            return redirect(url_for('edit_comment', comment_id=comment_id))
+
+        comment.content = new_content
+        comment.updated_at = datetime.utcnow()  # если добавите поле updated_at в модель
+        db.session.commit()
+        flash('Комментарий обновлён', 'success')
+        return redirect(url_for('post_detail', post_id=comment.post_id))
+
+    return render_template('edit_comment.html', comment=comment)
+
 
 @app.route('/comment/<int:comment_id>/delete', methods=['POST'])
 @login_required
@@ -733,25 +728,25 @@ def delete_comment(comment_id):
     comment = db.session.get(Comment, comment_id)
     if not comment or comment.author_id != current_user.id:
         abort(404)
-
+    post_id = comment.post_id
     db.session.delete(comment)
     db.session.commit()
-    flash('Комментарий удален', 'success')
-    return redirect(url_for('post_detail', post_id=comment.post_id))
+    flash('Комментарий удалён', 'success')
+    return redirect(url_for('post_detail', post_id=post_id))
+
 
 
 @app.route('/vote', methods=['POST'])
 @login_required
 def vote():
     data = request.get_json()
-    target_type = data.get('target_type')  # 'post' or 'comment'
+    target_type = data.get('target_type')
     target_id = data.get('target_id')
-    value = int(data.get('value'))  # 1 (за), -1 (против), 0 (отмена)
+    value = int(data.get('value'))
 
     if target_type not in ['post', 'comment'] or value not in [-1, 0, 1]:
         return jsonify({'error': 'Invalid request'}), 400
 
-    # Находим целевой объект
     if target_type == 'post':
         target = db.session.get(Post, target_id)
     else:
@@ -760,11 +755,9 @@ def vote():
     if not target:
         return jsonify({'error': 'Target not found'}), 404
 
-    # Нельзя голосовать за свои посты/комментарии
     if target.author_id == current_user.id:
         return jsonify({'error': 'You cannot vote on your own content'}), 400
 
-    # Проверяем существующий голос
     existing_vote = Vote.query.filter_by(
         user_id=current_user.id,
         target_type=target_type,
@@ -773,23 +766,20 @@ def vote():
 
     delta = 0
 
-    if value == 0:  # Отмена голоса
+    if value == 0:
         if existing_vote:
             delta = -existing_vote.value
             db.session.delete(existing_vote)
     else:
         if existing_vote:
             if existing_vote.value == value:
-                # Уже голосовал так - отменяем
                 delta = -value
                 db.session.delete(existing_vote)
                 value = 0
             else:
-                # Меняем голос
                 delta = 2 * value
                 existing_vote.value = value
         else:
-            # Новый голос
             vote = Vote(
                 user_id=current_user.id,
                 target_type=target_type,
@@ -799,18 +789,15 @@ def vote():
             db.session.add(vote)
             delta = value
 
-    # Обновляем рейтинг цели
     if delta != 0:
         target.rating += delta
 
-        # Обновляем репутацию автора
         author = db.session.get(User, target.author_id)
         if author:
             author.reputation += delta
 
     db.session.commit()
 
-    # Получаем текущий голос пользователя
     current_vote = 0
     if value != 0:
         current_vote = value

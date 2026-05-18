@@ -164,9 +164,11 @@ class Comment(db.Model):
     post_id = db.Column(db.Integer, db.ForeignKey('posts.id'), nullable=False)
     parent_comment_id = db.Column(db.Integer, db.ForeignKey('comments.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     rating = db.Column(db.Integer, default=0)
     is_answer = db.Column(db.Boolean, default=False)
     question_id = db.Column(db.Integer, db.ForeignKey('questions.id'), nullable=True)
+
 
     replies = db.relationship('Comment', backref=db.backref('parent', remote_side=[id]), lazy=True)
 
