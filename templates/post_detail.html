@@ -85,7 +85,7 @@
                              class="w-10 h-10 rounded-full">
                         <div>
                             <div class="flex items-center gap-2">
-                                <a href="{{ url_for('profile') if post.author.id == current_user.id else '#' }}"
+                                <a href="{{ url_for('user_profile', username=post.author.username) }}"
                                    class="font-semibold text-gray-800 hover:text-indigo-600">
                                     {{ post.author.username }}
                                 </a>
@@ -146,11 +146,24 @@
             <!-- Действия с постом -->
             <div class="px-6 py-4 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
                 <div class="flex items-center space-x-6">
-                    <button class="vote-btn flex items-center space-x-2 text-gray-500 hover:text-indigo-600 transition"
-                            data-target-type="post" data-target-id="{{ post.id }}">
-                        <i class="far fa-thumbs-up text-xl"></i>
-                        <span class="vote-count font-semibold">{{ post.rating }}</span>
-                    </button>
+                    <div class="flex items-center space-x-1">
+                        <button class="vote-up-btn flex items-center justify-center w-8 h-8 rounded-full hover:bg-green-100 transition
+                                       {% if post_user_vote == 1 %}text-green-600 bg-green-100{% else %}text-gray-500{% endif %}"
+                                data-target-type="post"
+                                data-target-id="{{ post.id }}"
+                                data-value="1">
+                            <i class="fas fa-thumbs-up"></i>
+                        </button>
+                        <span class="vote-count font-semibold min-w-[2rem] text-center">{{ post.rating }}</span>
+                        <button class="vote-down-btn flex items-center justify-center w-8 h-8 rounded-full hover:bg-red-100 transition
+                                       {% if post_user_vote == -1 %}text-red-600 bg-red-100{% else %}text-gray-500{% endif %}"
+                                data-target-type="post"
+                                data-target-id="{{ post.id }}"
+                                data-value="-1">
+                            <i class="fas fa-thumbs-down"></i>
+                        </button>
+                    </div>
+
                     <button class="flex items-center space-x-2 text-gray-500 hover:text-indigo-600 transition">
                         <i class="far fa-comment text-xl"></i>
                         <span class="font-semibold">{{ post.comments|length }}</span>
@@ -208,11 +221,23 @@
                         </div>
                     </div>
                     <div class="flex items-center gap-3">
-                        <button class="vote-btn flex items-center space-x-1 text-gray-500 hover:text-indigo-600"
-                                data-target-type="comment" data-target-id="{{ answer.id }}">
-                            <i class="far fa-thumbs-up"></i>
-                            <span class="vote-count">{{ answer.rating }}</span>
-                        </button>
+                        <div class="flex items-center space-x-1">
+                            <button class="vote-up-btn flex items-center justify-center w-8 h-8 rounded-full hover:bg-green-100 transition
+                                           {% if answer_user_votes[answer.id] == 1 %}text-green-600 bg-green-100{% else %}text-gray-500{% endif %}"
+                                    data-target-type="comment"
+                                    data-target-id="{{ answer.id }}"
+                                    data-value="1">
+                                <i class="fas fa-thumbs-up"></i>
+                            </button>
+                            <span class="vote-count font-semibold min-w-[2rem] text-center">{{ answer.rating }}</span>
+                            <button class="vote-down-btn flex items-center justify-center w-8 h-8 rounded-full hover:bg-red-100 transition
+                                           {% if answer_user_votes[answer.id] == -1 %}text-red-600 bg-red-100{% else %}text-gray-500{% endif %}"
+                                    data-target-type="comment"
+                                    data-target-id="{{ answer.id }}"
+                                    data-value="-1">
+                                <i class="fas fa-thumbs-down"></i>
+                            </button>
+                        </div>
                         {% if post.author.id == current_user.id and not post.is_resolved and answer.id != post.accepted_answer_id %}
                         <button onclick="acceptAnswer({{ answer.id }})"
                                 class="text-sm bg-green-100 text-green-700 px-3 py-1 rounded-full hover:bg-green-200 transition">
@@ -227,7 +252,6 @@
                     </div>
                 </div>
                 <div class="text-gray-700">{{ answer.content|safe }}</div>
-
 
                 <div class="mt-3">
                     <button onclick="showReplyForm({{ answer.id }})" class="text-sm text-indigo-600 hover:text-indigo-800">
@@ -260,10 +284,23 @@
                                 <span class="font-semibold text-sm">{{ reply.author.username }}</span>
                                 <span class="text-xs text-gray-400">{{ reply.created_at.strftime('%d.%m.%Y %H:%M') }}</span>
                             </div>
-                            <button class="vote-btn text-xs text-gray-500 hover:text-indigo-600"
-                                    data-target-type="comment" data-target-id="{{ reply.id }}">
-                                <i class="far fa-thumbs-up"></i> {{ reply.rating }}
-                            </button>
+                            <div class="flex items-center space-x-1">
+                                <button class="vote-up-btn text-xs flex items-center gap-1 hover:text-green-600 transition
+                                               {% if reply_user_votes[reply.id] == 1 %}text-green-600{% else %}text-gray-500{% endif %}"
+                                        data-target-type="comment"
+                                        data-target-id="{{ reply.id }}"
+                                        data-value="1">
+                                    <i class="fas fa-thumbs-up"></i>
+                                </button>
+                                <span class="vote-count text-sm">{{ reply.rating }}</span>
+                                <button class="vote-down-btn text-xs flex items-center gap-1 hover:text-red-600 transition
+                                               {% if reply_user_votes[reply.id] == -1 %}text-red-600{% else %}text-gray-500{% endif %}"
+                                        data-target-type="comment"
+                                        data-target-id="{{ reply.id }}"
+                                        data-value="-1">
+                                    <i class="fas fa-thumbs-down"></i>
+                                </button>
+                            </div>
                         </div>
                         <div class="text-sm text-gray-700 mt-1">{{ reply.content }}</div>
                     </div>
@@ -289,11 +326,23 @@
                             <div class="text-xs text-gray-400">{{ comment.created_at.strftime('%d.%m.%Y %H:%M') }}</div>
                         </div>
                     </div>
-                    <button class="vote-btn flex items-center space-x-1 text-gray-500 hover:text-indigo-600"
-                            data-target-type="comment" data-target-id="{{ comment.id }}">
-                        <i class="far fa-thumbs-up"></i>
-                        <span class="vote-count">{{ comment.rating }}</span>
-                    </button>
+                    <div class="flex items-center space-x-1">
+                        <button class="vote-up-btn flex items-center justify-center w-8 h-8 rounded-full hover:bg-green-100 transition
+                                       {% if comment_user_votes[comment.id] == 1 %}text-green-600 bg-green-100{% else %}text-gray-500{% endif %}"
+                                data-target-type="comment"
+                                data-target-id="{{ comment.id }}"
+                                data-value="1">
+                            <i class="fas fa-thumbs-up"></i>
+                        </button>
+                        <span class="vote-count font-semibold min-w-[2rem] text-center">{{ comment.rating }}</span>
+                        <button class="vote-down-btn flex items-center justify-center w-8 h-8 rounded-full hover:bg-red-100 transition
+                                       {% if comment_user_votes[comment.id] == -1 %}text-red-600 bg-red-100{% else %}text-gray-500{% endif %}"
+                                data-target-type="comment"
+                                data-target-id="{{ comment.id }}"
+                                data-value="-1">
+                            <i class="fas fa-thumbs-down"></i>
+                        </button>
+                    </div>
                 </div>
                 <div class="text-gray-700">{{ comment.content|safe }}</div>
                 <div class="mt-3">
@@ -327,10 +376,23 @@
                                 <span class="font-semibold text-sm">{{ reply.author.username }}</span>
                                 <span class="text-xs text-gray-400">{{ reply.created_at.strftime('%d.%m.%Y %H:%M') }}</span>
                             </div>
-                            <button class="vote-btn text-xs text-gray-500 hover:text-indigo-600"
-                                    data-target-type="comment" data-target-id="{{ reply.id }}">
-                                <i class="far fa-thumbs-up"></i> {{ reply.rating }}
-                            </button>
+                            <div class="flex items-center space-x-1">
+                                <button class="vote-up-btn text-xs flex items-center gap-1 hover:text-green-600 transition
+                                               {% if reply_user_votes[reply.id] == 1 %}text-green-600{% else %}text-gray-500{% endif %}"
+                                        data-target-type="comment"
+                                        data-target-id="{{ reply.id }}"
+                                        data-value="1">
+                                    <i class="fas fa-thumbs-up"></i>
+                                </button>
+                                <span class="vote-count text-sm">{{ reply.rating }}</span>
+                                <button class="vote-down-btn text-xs flex items-center gap-1 hover:text-red-600 transition
+                                               {% if reply_user_votes[reply.id] == -1 %}text-red-600{% else %}text-gray-500{% endif %}"
+                                        data-target-type="comment"
+                                        data-target-id="{{ reply.id }}"
+                                        data-value="-1">
+                                    <i class="fas fa-thumbs-down"></i>
+                                </button>
+                            </div>
                         </div>
                         <div class="text-sm text-gray-700 mt-1">{{ reply.content }}</div>
                     </div>
@@ -432,12 +494,20 @@
 </div>
 
 <script>
-// Голосование
-document.querySelectorAll('.vote-btn').forEach(btn => {
+// Голосование за посты и комментарии
+document.querySelectorAll('.vote-up-btn, .vote-down-btn').forEach(btn => {
     btn.addEventListener('click', async function() {
         const targetType = this.dataset.targetType;
         const targetId = this.dataset.targetId;
-        const voteSpan = this.querySelector('.vote-count');
+        const value = parseInt(this.dataset.value);
+        const parentDiv = this.parentElement;
+        const voteCountSpan = parentDiv.querySelector('.vote-count');
+        const upBtn = parentDiv.querySelector('.vote-up-btn');
+        const downBtn = parentDiv.querySelector('.vote-down-btn');
+
+        // Блокируем кнопку на время запроса
+        this.style.opacity = '0.5';
+        this.disabled = true;
 
         try {
             const response = await fetch('/vote', {
@@ -448,19 +518,62 @@ document.querySelectorAll('.vote-btn').forEach(btn => {
                 body: JSON.stringify({
                     target_type: targetType,
                     target_id: parseInt(targetId),
-                    value: 1
+                    value: value
                 })
             });
 
             const data = await response.json();
+
             if (data.success) {
-                voteSpan.textContent = data.new_rating;
+                // Обновляем счетчик
+                voteCountSpan.textContent = data.new_rating;
+
+                // Обновляем стили кнопок
+                if (data.user_vote === 1) {
+                    upBtn.classList.add('text-green-600', 'bg-green-100');
+                    upBtn.classList.remove('text-gray-500');
+                    downBtn.classList.remove('text-red-600', 'bg-red-100');
+                    downBtn.classList.add('text-gray-500');
+                } else if (data.user_vote === -1) {
+                    downBtn.classList.add('text-red-600', 'bg-red-100');
+                    downBtn.classList.remove('text-gray-500');
+                    upBtn.classList.remove('text-green-600', 'bg-green-100');
+                    upBtn.classList.add('text-gray-500');
+                } else {
+                    upBtn.classList.remove('text-green-600', 'bg-green-100');
+                    upBtn.classList.add('text-gray-500');
+                    downBtn.classList.remove('text-red-600', 'bg-red-100');
+                    downBtn.classList.add('text-gray-500');
+                }
+
+                // уведомление
+                showToast(data.user_vote !== 0 ? 'Голос учтен' : 'Голос отменен', 'success');
+            } else if (data.error === 'You cannot vote on your own content') {
+                showToast('Нельзя голосовать за свои посты', 'error');
             }
         } catch (error) {
             console.error('Error voting:', error);
+            showToast('Ошибка при голосовании', 'error');
+        } finally {
+            this.style.opacity = '1';
+            this.disabled = false;
         }
     });
 });
+
+function showToast(message, type) {
+    const toast = document.createElement('div');
+    toast.className = `fixed bottom-4 right-4 z-50 px-4 py-2 rounded-lg shadow-lg text-white transition-opacity duration-300 ${
+        type === 'success' ? 'bg-green-500' : 'bg-red-500'
+    }`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+    }, 2000);
+}
 
 // Закладки
 document.querySelectorAll('.bookmark-btn').forEach(btn => {
@@ -480,12 +593,15 @@ document.querySelectorAll('.bookmark-btn').forEach(btn => {
             if (data.bookmarked) {
                 icon.classList.remove('far');
                 icon.classList.add('fas');
+                showToast('Добавлено в закладки', 'success');
             } else {
                 icon.classList.remove('fas');
                 icon.classList.add('far');
+                showToast('Удалено из закладок', 'info');
             }
         } catch (error) {
             console.error('Error bookmarking:', error);
+            showToast('Ошибка при сохранении', 'error');
         }
     });
 });
@@ -535,10 +651,12 @@ async function acceptAnswer(answerId) {
 
         const data = await response.json();
         if (data.success) {
+            showToast('Ответ принят!', 'success');
             location.reload();
         }
     } catch (error) {
         console.error('Error accepting answer:', error);
+        showToast('Ошибка при принятии ответа', 'error');
     }
 }
 
@@ -560,6 +678,7 @@ async function deletePost() {
         }
     } catch (error) {
         console.error('Error deleting post:', error);
+        showToast('Ошибка при удалении поста', 'error');
     }
 }
 
@@ -573,7 +692,7 @@ function sharePost() {
         });
     } else {
         navigator.clipboard.writeText(window.location.href);
-        alert('Ссылка скопирована в буфер обмена!');
+        showToast('Ссылка скопирована в буфер обмена!', 'success');
     }
 }
 
@@ -599,14 +718,17 @@ async function subscribeUser(userId) {
                 btn.classList.remove('bg-gray-100', 'text-gray-700');
                 btn.classList.add('bg-indigo-600', 'text-white');
                 btn.querySelector('span').textContent = 'Отписаться';
+                showToast('Вы подписались на автора', 'success');
             } else {
                 btn.classList.remove('bg-indigo-600', 'text-white');
                 btn.classList.add('bg-gray-100', 'text-gray-700');
                 btn.querySelector('span').textContent = 'Подписаться на автора';
+                showToast('Вы отписались от автора', 'info');
             }
         }
     } catch (error) {
         console.error('Error subscribing:', error);
+        showToast('Ошибка при подписке', 'error');
     }
 }
 </script>

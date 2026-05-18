@@ -100,7 +100,8 @@ def register():
         errors = []
         if not username or len(username) < 3:
             errors.append('Имя пользователя должно содержать минимум 3 символа.')
-        if not re.match(r'^[a-zA-Z0-9_\-]+$', username):
+        if not re.match(r'^[a-zA-ZА-Яа-яЁё0-9_\-]+$', username):
+            #author_pattern = r'^[A-Za-zА-Яа-яЁё\s-]{2,50}$'
             errors.append('Имя пользователя может содержать только буквы, цифры, _ и -.')
         if not email or '@' not in email:
             errors.append('Введите корректный email.')
@@ -237,7 +238,68 @@ def logout():
     return redirect(url_for('index'))
 
 
+@app.route('/user/<string:username>')
+def user_profile(username):
+    user = User.query.filter_by(username=username).first_or_404()
 
+    articles = Article.query.filter_by(author_id=user.id, status='published').order_by(Article.created_at.desc()).all()
+    questions = Question.query.filter_by(author_id=user.id, status='published').order_by(
+        Question.created_at.desc()).all()
+    comments = Comment.query.filter_by(author_id=user.id).order_by(Comment.created_at.desc()).limit(20).all()
+
+    total_rating = sum(a.rating for a in articles) + sum(q.rating for q in questions)
+    total_views = sum(a.view_count for a in articles) + sum(q.view_count for q in questions)
+
+    is_subscribed = False
+    if current_user.is_authenticated and current_user.id != user.id:
+        sub = Subscription.query.filter_by(
+            user_id=current_user.id,
+            target_type='author',
+            target_id=user.id
+        ).first()
+        is_subscribed = sub is not None
+
+    return render_template('user_profile.html',
+                           profile_user=user,
+                           articles=articles,
+                           questions=questions,
+                           comments=comments,
+                           total_rating=total_rating,
+                           total_views=total_views,
+                           is_subscribed=is_subscribed)
+
+
+@app.route('/subscribe_user/<int:user_id>', methods=['POST'])
+@login_required
+def subscribe_user(user_id):
+    target_user = db.session.get(User, user_id)
+    if not target_user:
+        return jsonify({'error': 'User not found'}), 404
+
+    if target_user.id == current_user.id:
+        return jsonify({'error': 'Cannot subscribe to yourself'}), 400
+
+    existing = Subscription.query.filter_by(
+        user_id=current_user.id,
+        target_type='author',
+        target_id=user_id
+    ).first()
+
+    if existing:
+        db.session.delete(existing)
+        subscribed = False
+    else:
+        subscription = Subscription(
+            user_id=current_user.id,
+            target_type='author',
+            target_id=user_id
+        )
+        db.session.add(subscription)
+        subscribed = True
+
+    db.session.commit()
+
+    return jsonify({'subscribed': subscribed})
 
 @app.route('/profile')
 @login_required
@@ -429,8 +491,109 @@ def create_group():
     return render_template('create_group.html')
 
 
+@app.route('/post/<int:post_id>')
+def post_detail(post_id):
+    post = db.session.get(Post, post_id)
+    if not post:
+        abort(404)
 
+    # Увеличиваем счетчик просмотров
+    post.view_count += 1
+    db.session.commit()
 
+    comments = Comment.query.filter_by(post_id=post_id, parent_comment_id=None).order_by(Comment.created_at).all()
+
+    # Для вопроса - отдельно получаем ответы
+    answers = []
+    if post.type == 'question':
+        answers = Comment.query.filter_by(question_id=post_id, is_answer=True).order_by(Comment.rating.desc()).all()
+
+    # Получаем голоса текущего пользователя
+    post_user_vote = 0
+    comment_user_votes = {}
+    answer_user_votes = {}
+    reply_user_votes = {}
+
+    if current_user.is_authenticated:
+        # Голос за пост
+        post_vote = Vote.query.filter_by(
+            user_id=current_user.id,
+            target_type='post',
+            target_id=post_id
+        ).first()
+        post_user_vote = post_vote.value if post_vote else 0
+
+        # Голоса за комментарии в статье
+        for comment in comments:
+            vote = Vote.query.filter_by(
+                user_id=current_user.id,
+                target_type='comment',
+                target_id=comment.id
+            ).first()
+            comment_user_votes[comment.id] = vote.value if vote else 0
+
+            for reply in comment.replies:
+                reply_vote = Vote.query.filter_by(
+                    user_id=current_user.id,
+                    target_type='comment',
+                    target_id=reply.id
+                ).first()
+                reply_user_votes[reply.id] = reply_vote.value if reply_vote else 0
+
+        # Голоса за ответы на вопросы
+        for answer in answers:
+            vote = Vote.query.filter_by(
+                user_id=current_user.id,
+                target_type='comment',
+                target_id=answer.id
+            ).first()
+            answer_user_votes[answer.id] = vote.value if vote else 0
+
+            for reply in answer.replies:
+                reply_vote = Vote.query.filter_by(
+                    user_id=current_user.id,
+                    target_type='comment',
+                    target_id=reply.id
+                ).first()
+                reply_user_votes[reply.id] = reply_vote.value if reply_vote else 0
+
+    # Похожие посты
+    similar_posts = []
+    if post.tags:
+        tag_ids = [pt.tag_id for pt in post.tags]
+        similar_posts = Post.query.join(PostTag).filter(
+            PostTag.tag_id.in_(tag_ids),
+            Post.id != post_id,
+            Post.status == 'published'
+        ).distinct().limit(5).all()
+
+    # Проверка подписки на автора
+    is_subscribed = False
+    if current_user.is_authenticated and post.author.id != current_user.id:
+        sub = Subscription.query.filter_by(
+            user_id=current_user.id,
+            target_type='author',
+            target_id=post.author.id
+        ).first()
+        is_subscribed = sub is not None
+
+    bookmarked_post_ids = []
+    if current_user.is_authenticated:
+        bookmarked_post_ids = [b.post_id for b in Bookmark.query.filter_by(user_id=current_user.id).all()]
+
+    return render_template('post_detail.html',
+                           post=post,
+                           comments=comments,
+                           answers=answers,
+                           post_user_vote=post_user_vote,
+                           comment_user_votes=comment_user_votes,
+                           answer_user_votes=answer_user_votes,
+                           reply_user_votes=reply_user_votes,
+                           similar_posts=similar_posts,
+                           is_subscribed=is_subscribed,
+                           bookmarked_post_ids=bookmarked_post_ids)
+
+'''
 @app.route('/post/<int:post_id>')
 def post_detail(post_id):
     post = db.session.get(Post, post_id)
@@ -446,7 +609,7 @@ def post_detail(post_id):
         answers = Comment.query.filter_by(question_id=post_id, is_answer=True).order_by(Comment.rating.desc()).all()
 
     return render_template('post_detail.html', post=post, comments=comments, answers=answers)
-
+'''
 
 @app.route('/create', methods=['GET', 'POST'])
 @login_required
@@ -580,47 +743,83 @@ def vote():
     data = request.get_json()
     target_type = data.get('target_type')  # 'post' or 'comment'
     target_id = data.get('target_id')
-    value = int(data.get('value'))  # 1 or -1
+    value = int(data.get('value'))  # 1 (за), -1 (против), 0 (отмена)
 
-    if target_type not in ['post', 'comment'] or value not in [1, -1]:
+    if target_type not in ['post', 'comment'] or value not in [-1, 0, 1]:
         return jsonify({'error': 'Invalid request'}), 400
 
+    # Находим целевой объект
+    if target_type == 'post':
+        target = db.session.get(Post, target_id)
+    else:
+        target = db.session.get(Comment, target_id)
+
+    if not target:
+        return jsonify({'error': 'Target not found'}), 404
+
+    # Нельзя голосовать за свои посты/комментарии
+    if target.author_id == current_user.id:
+        return jsonify({'error': 'You cannot vote on your own content'}), 400
+
+    # Проверяем существующий голос
     existing_vote = Vote.query.filter_by(
         user_id=current_user.id,
         target_type=target_type,
         target_id=target_id
     ).first()
 
-    if existing_vote:
-        if existing_vote.value == value:
-            delta = -value
+    delta = 0
+
+    if value == 0:  # Отмена голоса
+        if existing_vote:
+            delta = -existing_vote.value
             db.session.delete(existing_vote)
+    else:
+        if existing_vote:
+            if existing_vote.value == value:
+                # Уже голосовал так - отменяем
+                delta = -value
+                db.session.delete(existing_vote)
+                value = 0
+            else:
+                # Меняем голос
+                delta = 2 * value
+                existing_vote.value = value
         else:
-            delta = 2 * value
-            existing_vote.value = value
-    else:
-        vote = Vote(user_id=current_user.id, target_type=target_type, target_id=target_id, value=value)
-        db.session.add(vote)
-        delta = value
+            # Новый голос
+            vote = Vote(
+                user_id=current_user.id,
+                target_type=target_type,
+                target_id=target_id,
+                value=value
+            )
+            db.session.add(vote)
+            delta = value
 
-    if target_type == 'post':
-        target = db.session.get(Post, target_id)
-    else:
-        target = db.session.get(Comment, target_id)
-
-    if target:
+    # Обновляем рейтинг цели
+    if delta != 0:
         target.rating += delta
+
+        # Обновляем репутацию автора
         author = db.session.get(User, target.author_id)
         if author:
             author.reputation += delta
 
     db.session.commit()
-    new_rating = target.rating if target else 0
+
+    # Получаем текущий голос пользователя
+    current_vote = 0
+    if value != 0:
+        current_vote = value
+    elif existing_vote and existing_vote.value == value:
+        current_vote = 0
+    elif existing_vote:
+        current_vote = existing_vote.value
 
     return jsonify({
         'success': True,
-        'new_rating': new_rating,
-        'user_vote': value if not existing_vote or existing_vote.value != value else 0
+        'new_rating': target.rating,
+        'user_vote': current_vote
     })
 
 
