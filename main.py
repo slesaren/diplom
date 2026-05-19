@@ -30,6 +30,7 @@ from logging.handlers import RotatingFileHandler
 from emailregister import  VerificationEmailService, EmailProvider #send_verification_email
 import sys
 from flask import session as flask_session
+import markdown
 
 logging.basicConfig(
     level=logging.INFO,
@@ -53,6 +54,21 @@ login_manager.login_message = 'Пожалуйста, войдите для до�
 login_manager.login_message_category = 'info'
 
 serializer = URLSafeTimedSerializer(app.config['SECRET_KEY'])
+
+def render_markdown(text):
+    """Преобразует Markdown в HTML с базовыми расширениями."""
+    if not text:
+        return ""
+    return markdown.markdown(
+        text,
+        extensions=[
+            'extra',          # таблицы, сноски, оглавление
+            'codehilite',     # подсветка кода (потребуется pygments)
+            'nl2br',          # переводы строк в <br>
+            'sane_lists',     # более умные списки
+            'toc'             # оглавление
+        ]
+    )
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -571,9 +587,10 @@ def post_detail(post_id):
     bookmarked_post_ids = []
     if current_user.is_authenticated:
         bookmarked_post_ids = [b.post_id for b in Bookmark.query.filter_by(user_id=current_user.id).all()]
-
+    post_html = render_markdown(post.content)
     return render_template('post_detail.html',
                            post=post,
+                           post_html=post_html,
                            comments=comments,
                            answers=answers,
                            post_user_vote=post_user_vote,

@@ -19,13 +19,11 @@
         color: #4f46e5;
     }
 
-
     .content-html {
         font-size: 1.125rem;
         line-height: 1.75;
         max-width: 100%;
     }
-
     .content-html h1 {
         font-size: 2rem;
         font-weight: 700;
@@ -81,6 +79,26 @@
     .comment-actions .delete-btn:hover {
         color: #ef4444;
     }
+
+    /* Improved dropdown menu */
+    .post-menu-container {
+        position: relative;
+    }
+    .post-menu-dropdown {
+        position: absolute;
+        right: 0;
+        top: 100%;
+        margin-top: 0.5rem;
+        background: white;
+        border-radius: 0.5rem;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        min-width: 150px;
+        z-index: 50;
+        display: none;
+    }
+    .post-menu-dropdown.show {
+        display: block;
+    }
 </style>
 {% endblock %}
 
@@ -99,7 +117,6 @@
 
         <!-- Пост -->
         <article class="bg-white rounded-xl shadow-sm overflow-hidden">
-            <!-- Заголовок -->
             <div class="p-6 border-b border-gray-100">
                 <div class="flex items-start justify-between mb-4">
                     <div class="flex items-center space-x-3">
@@ -126,16 +143,16 @@
                             {{ 'Статья' if post.type == 'article' else 'Вопрос' }}
                         </span>
                         {% if post.author.id == current_user.id %}
-                        <div class="relative">
-                            <button onclick="togglePostMenu()" class="text-gray-400 hover:text-gray-600">
+                        <div class="post-menu-container">
+                            <button id="postMenuButton" class="text-gray-400 hover:text-gray-600 focus:outline-none">
                                 <i class="fas fa-ellipsis-v"></i>
                             </button>
-                            <div id="postMenu" class="hidden absolute right-0 mt-2 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10 min-w-[150px]">
+                            <div id="postMenuDropdown" class="post-menu-dropdown bg-white rounded-lg shadow-lg border border-gray-200 py-1">
                                 <a href="{{ url_for('edit_post', post_id=post.id) }}"
                                    class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
                                     <i class="fas fa-pen mr-2"></i> Редактировать
                                 </a>
-                                <button onclick="deletePost()"
+                                <button id="deletePostBtn"
                                         class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50">
                                     <i class="fas fa-trash mr-2"></i> Удалить
                                 </button>
@@ -147,7 +164,6 @@
 
                 <h1 class="text-3xl font-bold text-gray-800 mb-4">{{ post.title }}</h1>
 
-                <!-- Теги -->
                 {% if post.tags %}
                 <div class="flex flex-wrap gap-2 mb-4">
                     {% for post_tag in post.tags %}
@@ -160,12 +176,12 @@
                 {% endif %}
             </div>
 
-            <!-- Контент -->
             <div class="p-6 content-html">
-                {{ post.content|safe }}
+                 <!-- {{ post.content|safe }} -->
+                {{ post_html|safe }}
+
             </div>
 
-            <!-- Действия с постом -->
             <div class="px-6 py-4 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
                 <div class="flex items-center space-x-6">
                     <div class="flex items-center space-x-1">
@@ -280,7 +296,6 @@
                             <i class="fas fa-check-circle"></i> Принятый ответ
                         </span>
                         {% endif %}
-                        <!-- Кнопки для автора ответа -->
                         {% if current_user.id == answer.author_id %}
                         <div class="comment-actions">
                             <a href="{{ url_for('edit_comment', comment_id=answer.id) }}" class="edit-btn">
@@ -301,7 +316,6 @@
                     </button>
                 </div>
 
-                <!-- Форма ответа на комментарий -->
                 <div id="reply-form-{{ answer.id }}" class="hidden mt-4">
                     <form method="POST" action="{{ url_for('add_comment', post_id=post.id) }}">
                         <input type="hidden" name="parent_id" value="{{ answer.id }}">
@@ -315,7 +329,6 @@
                     </form>
                 </div>
 
-                <!-- Вложенные комментарии к ответам -->
                 {% if answer.replies %}
                 <div class="mt-4 comment-tree">
                     {% for reply in answer.replies %}
@@ -435,7 +448,6 @@
                     </button>
                 </div>
 
-                <!-- Форма ответа -->
                 <div id="reply-form-{{ comment.id }}" class="hidden mt-4">
                     <form method="POST" action="{{ url_for('add_comment', post_id=post.id) }}">
                         <input type="hidden" name="parent_id" value="{{ comment.id }}">
@@ -449,7 +461,6 @@
                     </form>
                 </div>
 
-                <!-- Вложенные комментарии -->
                 {% if comment.replies %}
                 <div class="mt-4 comment-tree">
                     {% for reply in comment.replies %}
@@ -533,7 +544,6 @@
 
     <!-- Сайдбар -->
     <div class="lg:w-1/3 space-y-6">
-        <!-- Информация об авторе -->
         <div class="bg-white rounded-xl shadow-sm p-4 sticky top-20">
             <h3 class="font-semibold text-gray-800 mb-3">Об авторе</h3>
             <div class="flex items-center space-x-3 mb-3">
@@ -558,7 +568,6 @@
             {% endif %}
         </div>
 
-        <!-- Похожие посты -->
         {% if similar_posts %}
         <div class="bg-white rounded-xl shadow-sm p-4">
             <h3 class="font-semibold text-gray-800 mb-3">Похожие посты</h3>
@@ -577,7 +586,6 @@
         </div>
         {% endif %}
 
-        <!-- Статистика -->
         <div class="bg-white rounded-xl shadow-sm p-4">
             <h3 class="font-semibold text-gray-800 mb-3">Статистика</h3>
             <div class="space-y-2 text-sm">
@@ -603,6 +611,47 @@
 </div>
 
 <script>
+// Improved dropdown menu
+document.addEventListener('DOMContentLoaded', function() {
+    const menuButton = document.getElementById('postMenuButton');
+    const menuDropdown = document.getElementById('postMenuDropdown');
+    if (menuButton && menuDropdown) {
+        menuButton.addEventListener('click', function(e) {
+            e.stopPropagation();
+            menuDropdown.classList.toggle('show');
+        });
+        // Close when clicking outside
+        document.addEventListener('click', function(e) {
+            if (!menuButton.contains(e.target) && !menuDropdown.contains(e.target)) {
+                menuDropdown.classList.remove('show');
+            }
+        });
+    }
+
+    // Delete post handler
+    const deleteBtn = document.getElementById('deletePostBtn');
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            if (confirm('Вы уверены, что хотите удалить этот пост? Это действие нельзя отменить.')) {
+                fetch('/post/{{ post.id }}/delete', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                }).then(response => response.json())
+                  .then(data => {
+                      if (data.success) {
+                          window.location.href = '/';
+                      } else {
+                          alert('Ошибка при удалении поста');
+                      }
+                  });
+            }
+        });
+    }
+});
+
 // Голосование за посты и комментарии
 document.querySelectorAll('.vote-up-btn, .vote-down-btn').forEach(btn => {
     btn.addEventListener('click', async function() {
@@ -750,22 +799,6 @@ async function deleteComment(commentId) {
     }
 }
 
-// Меню поста
-function togglePostMenu() {
-    const menu = document.getElementById('postMenu');
-    if (menu) {
-        menu.classList.toggle('hidden');
-    }
-}
-
-// Закрыть меню при клике вне
-document.addEventListener('click', function(event) {
-    const menu = document.getElementById('postMenu');
-    if (menu && !menu.contains(event.target) && !event.target.closest('[onclick="togglePostMenu()"]')) {
-        menu.classList.add('hidden');
-    }
-});
-
 // Принять ответ
 async function acceptAnswer(answerId) {
     if (!confirm('Принять этот ответ как правильный?')) return;
@@ -786,28 +819,6 @@ async function acceptAnswer(answerId) {
     } catch (error) {
         console.error('Error accepting answer:', error);
         showToast('Ошибка при принятии ответа', 'error');
-    }
-}
-
-// Удалить пост
-async function deletePost() {
-    if (!confirm('Вы уверены, что хотите удалить этот пост? Это действие нельзя отменить.')) return;
-
-    try {
-        const response = await fetch(`/post/{{ post.id }}/delete`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            }
-        });
-
-        const data = await response.json();
-        if (data.success) {
-            window.location.href = '/';
-        }
-    } catch (error) {
-        console.error('Error deleting post:', error);
-        showToast('Ошибка при удалении поста', 'error');
     }
 }
 
