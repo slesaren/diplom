@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-
+{% set full_width_content = true %}
 {% block title %}{{ post.title }} — QArticle{% endblock %}
 
 {% set full_width_content = true %}
@@ -18,11 +18,14 @@
     .vote-btn-active {
         color: #4f46e5;
     }
+
+
     .content-html {
         font-size: 1.125rem;
         line-height: 1.75;
         max-width: 100%;
     }
+
     .content-html h1 {
         font-size: 2rem;
         font-weight: 700;

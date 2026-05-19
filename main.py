@@ -101,7 +101,6 @@ def register():
         if not username or len(username) < 3:
             errors.append('Имя пользователя должно содержать минимум 3 символа.')
         if not re.match(r'^[a-zA-ZА-Яа-яЁё0-9_\-]+$', username):
-            #author_pattern = r'^[A-Za-zА-Яа-яЁё\s-]{2,50}$'
             errors.append('Имя пользователя может содержать только буквы, цифры, _ и -.')
         if not email or '@' not in email:
             errors.append('Введите корректный email.')
@@ -481,7 +480,6 @@ def create_group():
         db.session.add(group)
         db.session.commit()
 
-        # Автоматически добавляем создателя как админа
         membership = UserGroup(user_id=current_user.id, group_id=group.id, role='admin', karma_in_group=0)
         db.session.add(membership)
         db.session.commit()
@@ -850,14 +848,42 @@ def toggle_bookmark(post_id):
     return jsonify({'bookmarked': bookmarked})
 
 
+
+
 @app.route('/bookmarks')
 @login_required
 def bookmarks():
     page = request.args.get('page', 1, type=int)
-    bookmarked_posts = db.session.query(Post).join(Bookmark).filter(
+    filter_type = request.args.get('filter', 'all')
+    query = Bookmark.query.filter_by(user_id=current_user.id)
+
+    if filter_type == 'article':
+        query = query.join(Post, Bookmark.post_id == Post.id).filter(Post.type == 'article')
+    elif filter_type == 'question':
+        query = query.join(Post, Bookmark.post_id == Post.id).filter(Post.type == 'question')
+
+    bookmarked_posts = query.order_by(Bookmark.saved_at.desc()).paginate(page=page, per_page=20)
+
+    tag_stats = db.session.query(
+        Tag.name,
+        func.count(PostTag.tag_id).label('count')
+    ).select_from(Bookmark).join(
+        Post, Bookmark.post_id == Post.id
+    ).join(
+        PostTag, Post.id == PostTag.post_id
+    ).join(
+        Tag, PostTag.tag_id == Tag.id
+    ).filter(
         Bookmark.user_id == current_user.id
-    ).paginate(page=page, per_page=20)
-    return render_template('bookmarks.html', posts=bookmarked_posts)
+    ).group_by(
+        Tag.id, Tag.name
+    ).order_by(
+        func.count(PostTag.tag_id).desc()
+    ).limit(15).all()
+
+    return render_template('bookmarks.html',
+                           bookmarks=bookmarked_posts,
+                           tag_stats=tag_stats)
 
 
 @app.route('/subscribe', methods=['POST'])
