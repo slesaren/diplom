@@ -56,7 +56,6 @@ login_manager.login_message_category = 'info'
 serializer = URLSafeTimedSerializer(app.config['SECRET_KEY'])
 
 def render_markdown(text):
-    """Преобразует Markdown в HTML с базовыми расширениями."""
     if not text:
         return ""
     return markdown.markdown(
@@ -962,6 +961,75 @@ def accept_answer(answer_id):
     db.session.commit()
 
     return jsonify({'success': True})
+
+
+@app.route('/top')
+def top_week():
+    week_ago = datetime.utcnow() - timedelta(days=7)
+
+     # по лайкам
+    top_posts = Post.query.filter(
+        Post.status == 'published',
+        Post.created_at >= week_ago
+    ).order_by(Post.rating.desc()).limit(10).all()
+
+
+    top_viewed_posts = Post.query.filter(
+        Post.status == 'published',
+        Post.created_at >= week_ago
+    ).order_by(Post.view_count.desc()).limit(10).all()
+
+    from sqlalchemy import func
+    top_commented_posts = db.session.query(
+        Post, func.count(Comment.id).label('comments_count')
+    ).outerjoin(Comment).filter(
+        Post.status == 'published',
+        Post.created_at >= week_ago
+    ).group_by(Post.id).order_by(
+        func.count(Comment.id).desc()
+    ).limit(10).all()
+
+    #  Топ пользователей по репутации за неделю, нужна история репутации, но пока используем общую репутацию
+    top_users = User.query.filter(
+        User.is_active == True,
+        User.reputation > 0
+    ).order_by(User.reputation.desc()).limit(10).all()
+
+    new_users = User.query.filter(
+        User.created_at >= week_ago
+    ).order_by(User.created_at.desc()).limit(10).all()
+
+    top_tags = db.session.query(
+        Tag.name,
+        Tag.id,
+        func.count(PostTag.post_id).label('usage_count')
+    ).join(PostTag).join(Post).filter(
+        Post.created_at >= week_ago,
+        Post.status == 'published'
+    ).group_by(Tag.id).order_by(
+        func.count(PostTag.post_id).desc()
+    ).limit(15).all()
+
+    stats = {
+        'total_posts': Post.query.filter(Post.created_at >= week_ago, Post.status == 'published').count(),
+        'total_comments': Comment.query.filter(Comment.created_at >= week_ago).count(),
+        'total_users': User.query.filter(User.created_at >= week_ago).count(),
+        'total_likes': Vote.query.filter(
+            Vote.created_at >= week_ago,
+            Vote.value == 1
+        ).count()
+    }
+
+    return render_template('top_week.html',
+                           top_posts=top_posts,
+                           top_viewed_posts=top_viewed_posts,
+                           top_commented_posts=top_commented_posts,
+                           top_users=top_users,
+                           new_users=new_users,
+                           top_tags=top_tags,
+                           stats=stats)
+
+
 
 
 @app.route('/debug_session')

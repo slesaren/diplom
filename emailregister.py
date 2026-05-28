@@ -301,7 +301,7 @@ class VerificationEmailService(EmailService):
                 </div>
 
                 <div class="footer">
-                    <p>© 2025 QArticle — платформа совместного обучения</p>
+                    <p>© 2026 QArticle — платформа совместного обучения</p>
                 </div>
             </div>
         </body>
