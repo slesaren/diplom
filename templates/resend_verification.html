@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}Повторная отправка подтверждения — QArticle{% endblock %}
+
+{% block content %}
+<div class="flex justify-center items-center min-h-[80vh]">
+    <div class="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
+        <div class="text-center mb-6">
+            <i class="fas fa-envelope text-indigo-600 text-4xl"></i>
+            <h2 class="text-2xl font-bold mt-2">Повторная отправка подтверждения</h2>
+            <p class="text-gray-500 text-sm mt-1">
+                Введите email, который вы указали при регистрации
+            </p>
+        </div>
+
+        <form method="POST" action="{{ url_for('resend_verification_post') }}" class="space-y-5">
+            <div>
+                <label for="email" class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <div class="relative">
+                    <i class="fas fa-envelope absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                    <input type="email" id="email" name="email" required
+                           class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                           placeholder="your@email.com">
+                </div>
+            </div>
+
+            <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2.5 rounded-lg transition duration-200 flex items-center justify-center">
+                <i class="fas fa-paper-plane mr-2"></i> Отправить повторно
+            </button>
+        </form>
+
+        <div class="mt-6 text-center text-sm text-gray-500">
+            <a href="{{ url_for('login') }}" class="text-indigo-600 hover:underline">
+                <i class="fas fa-arrow-left mr-1"></i> Вернуться ко входу
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

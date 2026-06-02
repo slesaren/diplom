@@ -22,7 +22,6 @@ from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
 from config import Config
 from redis_utils import RedisBookStats
 
-# email_service.py
 import smtplib
 import ssl
 import logging
@@ -167,7 +166,6 @@ class EmailService:
 class VerificationEmailService(EmailService):
 
     def send_verification(self, to_email: str, username: str, verification_url: str) -> bool:
-
         subject = "Подтверждение регистрации на QArticle"
         body_text = f"""
         Здравствуйте, {username}!
@@ -185,7 +183,7 @@ class VerificationEmailService(EmailService):
         Команда QArticle
         """
 
-        # HTML версия
+
         body_html = f"""
         <!DOCTYPE html>
         <html>
@@ -310,3 +308,150 @@ class VerificationEmailService(EmailService):
 
         return self.send_email(to_email, subject, body_text, body_html)
 
+
+class PasswordResetEmailService(EmailService):
+
+    def send_password_reset(self, to_email: str, username: str, reset_url: str) -> bool:
+
+        subject = "Восстановление пароля на QArticle"
+
+        body_text = f"""
+        Здравствуйте, {username}!
+
+        Мы получили запрос на восстановление пароля для вашей учетной записи на QArticle.
+
+        Для создания нового пароля, пожалуйста, перейдите по ссылке:
+        {reset_url}
+
+        Ссылка действительна в течение 1 часа.
+
+        Если вы не запрашивали восстановление пароля, просто проигнорируйте это письмо. 
+        Ваш пароль останется без изменений.
+
+        С уважением,
+        Команда QArticle
+        """
+
+        body_html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                .container {{
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+                    max-width: 560px;
+                    margin: 0 auto;
+                    background: #ffffff;
+                    border-radius: 12px;
+                    overflow: hidden;
+                    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                }}
+                .header {{
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    padding: 32px 24px;
+                    text-align: center;
+                }}
+                .header h1 {{
+                    color: white;
+                    margin: 0;
+                    font-size: 28px;
+                }}
+                .content {{
+                    padding: 32px 24px;
+                }}
+                .greeting {{
+                    font-size: 18px;
+                    color: #2d3748;
+                    margin-bottom: 20px;
+                }}
+                .message {{
+                    color: #4a5568;
+                    line-height: 1.6;
+                    margin-bottom: 24px;
+                }}
+                .button-container {{
+                    text-align: center;
+                    margin: 32px 0;
+                }}
+                .button {{
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: white;
+                    padding: 14px 32px;
+                    text-decoration: none;
+                    border-radius: 8px;
+                    display: inline-block;
+                    font-weight: 600;
+                    transition: transform 0.2s;
+                }}
+                .button:hover {{
+                    transform: translateY(-2px);
+                }}
+                .link {{
+                    background: #f7fafc;
+                    padding: 12px;
+                    border-radius: 6px;
+                    font-size: 12px;
+                    word-break: break-all;
+                    color: #4a5568;
+                    margin: 16px 0;
+                }}
+                .footer {{
+                    background: #f7fafc;
+                    padding: 24px;
+                    text-align: center;
+                    color: #718096;
+                    font-size: 12px;
+                }}
+                .warning {{
+                    background: #fef5e7;
+                    border-left: 4px solid #f39c12;
+                    padding: 12px;
+                    margin: 20px 0;
+                    font-size: 13px;
+                }}
+            </style>
+        </head>
+        <body style="margin: 0; padding: 20px; background: #f7fafc;">
+            <div class="container">
+                <div class="header">
+                    <h1>QArticle</h1>
+                    <p style="color: rgba(255,255,255,0.9); margin: 8px 0 0;">Восстановление доступа</p>
+                </div>
+
+                <div class="content">
+                    <div class="greeting">
+                        <strong>Здравствуйте, {username}!</strong>
+                    </div>
+
+                    <div class="message">
+                        Мы получили запрос на восстановление пароля для вашей учетной записи на <strong>QArticle</strong>.
+                    </div>
+
+                    <div class="button-container">
+                        <a href="{reset_url}" class="button">Создать новый пароль</a>
+                    </div>
+
+                    <div class="link">
+                        Или скопируйте ссылку в браузер:<br>
+                        {reset_url}
+                    </div>
+
+                    <div class="warning">
+                         Ссылка действительна в течение 1 часа.
+                    </div>
+
+                    <div class="message" style="font-size: 14px; color: #718096;">
+                        Если вы не запрашивали восстановление пароля, просто проигнорируйте это письмо.
+                        Ваш пароль останется без изменений.
+                    </div>
+                </div>
+
+                <div class="footer">
+                    <p>© 2026 QArticle — платформа совместного обучения</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+        return self.send_email(to_email, subject, body_text, body_html)

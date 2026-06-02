@@ -31,6 +31,7 @@ from emailregister import  VerificationEmailService, EmailProvider #send_verific
 import sys
 from flask import session as flask_session
 import markdown
+from emailregister import VerificationEmailService, PasswordResetEmailService, EmailProvider
 
 logging.basicConfig(
     level=logging.INFO,
@@ -205,6 +206,127 @@ def resend_verification():
     else:
         flash('Пользователь с таким email не найден или уже подтвержден.', 'warning')
     return redirect(url_for('login'))
+
+
+
+password_reset_service = PasswordResetEmailService(provider=email_provider)
+
+
+@app.route('/forgot-password', methods=['GET', 'POST'])
+def forgot_password():
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+
+    if request.method == 'POST':
+        email = request.form.get('email', '').strip().lower()
+
+        if not email:
+            flash('Пожалуйста, введите ваш email.', 'danger')
+            return render_template('forgot_password.html')
+
+        user = User.query.filter_by(email=email).first()
+
+        if user and user.email_verified:
+            token = serializer.dumps(email, salt='password-reset')
+            reset_url = url_for('reset_password', token=token, _external=True)
+
+            success = password_reset_service.send_password_reset(email, user.username, reset_url)
+
+            if success:
+                flash('Письмо с инструкцией по восстановлению пароля отправлено на ваш email.', 'success')
+                logger.info(f"Password reset email sent to {email}")
+            else:
+                flash('Не удалось отправить письмо. Пожалуйста, попробуйте позже или свяжитесь с администратором.',
+                      'danger')
+                logger.error(f"Failed to send password reset email to {email}")
+        else:
+            import time
+            time.sleep(1)
+            flash('Если аккаунт с таким email существует и подтверждён, вы получите письмо с инструкцией.', 'info')
+
+        return redirect(url_for('login'))
+
+    return render_template('forgot_password.html')
+
+
+@app.route('/reset-password/<token>', methods=['GET', 'POST'])
+def reset_password(token):
+    if current_user.is_authenticated:
+        return redirect(url_for('index'))
+
+    try:
+        email = serializer.loads(token, salt='password-reset', max_age=3600)
+    except SignatureExpired:
+        flash('Ссылка для восстановления пароля истекла (действительна 1 час). Пожалуйста, запросите новую ссылку.',
+              'danger')
+        return redirect(url_for('forgot_password'))
+    except BadSignature:
+        flash('Недействительная ссылка восстановления пароля.', 'danger')
+        return redirect(url_for('forgot_password'))
+
+    user = User.query.filter_by(email=email).first()
+
+    if not user or not user.email_verified:
+        flash('Пользователь не найден или email не подтверждён.', 'danger')
+        return redirect(url_for('forgot_password'))
+
+    if request.method == 'POST':
+        password = request.form.get('password', '')
+        confirm_password = request.form.get('confirm_password', '')
+
+        errors = []
+
+        if len(password) < 6:
+            errors.append('Пароль должен быть не менее 6 символов.')
+        if password != confirm_password:
+            errors.append('Пароли не совпадают.')
+
+        if errors:
+            for error in errors:
+                flash(error, 'danger')
+            return render_template('reset_password.html', token=token)
+
+        user.set_password(password)
+        db.session.commit()
+
+        logger.info(f"Password reset for user: {user.username} ({email})")
+        flash('Пароль успешно изменён! Теперь вы можете войти в систему.', 'success')
+
+        return redirect(url_for('login'))
+
+    return render_template('reset_password.html', token=token)
+
+
+@app.route('/resend-verification', methods=['GET'])
+def resend_verification_page():
+    return render_template('resend_verification.html')
+
+
+@app.route('/resend-verification', methods=['POST'])
+def resend_verification_post():
+    email = request.form.get('email', '').strip().lower()
+
+    if not email:
+        flash('Пожалуйста, введите ваш email.', 'danger')
+        return render_template('resend_verification.html')
+
+    user = User.query.filter_by(email=email).first()
+
+    if user and not user.email_verified:
+        token = serializer.dumps(email, salt='email-verification')
+        verification_url = url_for('verify_email', token=token, _external=True)
+        success = email_service.send_verification(email, user.username, verification_url)
+
+        if success:
+            flash('Новое письмо с подтверждением отправлено на ваш email.', 'success')
+            logger.info(f"Resent verification email to {email}")
+        else:
+            flash('Не удалось отправить письмо. Пожалуйста, попробуйте позже.', 'danger')
+    else:
+        flash('Пользователь с таким email не найден или уже подтверждён.', 'warning')
+
+    return redirect(url_for('login'))
+
 
 
 @app.route('/login', methods=['GET', 'POST'])
