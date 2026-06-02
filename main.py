@@ -33,6 +33,9 @@ from flask import session as flask_session
 import markdown
 from emailregister import VerificationEmailService, PasswordResetEmailService, EmailProvider
 
+from sqlalchemy import func
+from models import Subscription
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -950,14 +953,67 @@ def vote():
 
 
 
-
 @app.route('/tag/<string:tag_name>')
 def tag_posts(tag_name):
     tag = Tag.query.filter_by(name=tag_name).first_or_404()
     page = request.args.get('page', 1, type=int)
-    posts = db.session.query(Post).join(PostTag).filter(PostTag.tag_id == tag.id).paginate(page=page, per_page=20)
-    return render_template('tag_posts.html', tag=tag, posts=posts)
+    sort = request.args.get('sort', 'new')
 
+    query = db.session.query(Post).join(PostTag).filter(
+        PostTag.tag_id == tag.id,
+        Post.status == 'published'
+    )
+
+    if sort == 'top':
+        query = query.order_by(Post.rating.desc())
+    elif sort == 'discussed':
+        query = query.order_by(func.count(Comment.id).desc())
+    else:
+        query = query.order_by(Post.created_at.desc())
+
+    posts = query.paginate(page=page, per_page=20)
+
+    popular_tags_query = db.session.query(
+        Tag, func.count(PostTag.post_id).label('post_count')
+    ).join(PostTag).join(Post).filter(
+        Post.status == 'published'
+    ).group_by(Tag.id).order_by(
+        func.count(PostTag.post_id).desc()
+    ).limit(20).all()
+
+    popular_tags = []
+    for t, count in popular_tags_query:
+        t.post_count = count
+        popular_tags.append(t)
+
+    related_tags_query = db.session.query(
+        Tag, func.count(PostTag.post_id).label('count')
+    ).join(PostTag).join(Post, Post.id == PostTag.post_id).filter(
+        Post.id.in_(db.session.query(Post.id).join(PostTag).filter(PostTag.tag_id == tag.id)),
+        Tag.id != tag.id
+    ).group_by(Tag.id).order_by(
+        func.count(PostTag.post_id).desc()
+    ).limit(10).all()
+
+    related_tags = [t for t, _ in related_tags_query]
+
+    is_subscribed = False
+    if current_user.is_authenticated:
+        sub = Subscription.query.filter_by(
+            user_id=current_user.id,
+            target_type='tag',
+            target_id=tag.id
+        ).first()
+        is_subscribed = sub is not None
+
+    return render_template(
+        'tag_posts.html',
+        tag=tag,
+        posts=posts,
+        popular_tags=popular_tags,
+        related_tags=related_tags,
+        is_subscribed=is_subscribed
+    )
 
 @app.route('/tags')
 def tags_list():
