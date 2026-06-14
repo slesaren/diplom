@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}Страница не найдена — QArticle{% endblock %}
+
+{% block content %}
+<div class="min-h-[70vh] flex items-center justify-center px-4">
+    <div class="text-center max-w-2xl">
+        <div class="relative mb-8">
+            <div class="text-[150px] md:text-[200px] font-black text-gray-200 select-none">
+                404
+            </div>
+            <div class="absolute inset-0 flex items-center justify-center">
+                <i class="fas fa-compass text-6xl text-indigo-500 animate-bounce"></i>
+            </div>
+        </div>
+
+        <h1 class="text-3xl md:text-4xl font-bold text-gray-800 mb-4">
+            Страница потерялась
+        </h1>
+        <p class="text-gray-600 text-lg mb-8">
+            К сожалению, страница, которую вы ищете, не существует или была перемещена.
+            Возможно, вы перешли по нерабочей ссылке или ввели неправильный адрес.
+        </p>
+
+        <div class="mb-8">
+            <div class="relative max-w-md mx-auto">
+                <i class="fas fa-search absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                <input type="text" id="searchInput"
+                       class="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                       placeholder="Поиск по сайту...">
+            </div>
+        </div>
+
+        <div class="flex flex-col sm:flex-row gap-4 justify-center">
+            <a href="{{ url_for('index') }}"
+               class="inline-flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-3 rounded-xl transition duration-200">
+                <i class="fas fa-home"></i>
+                <span>На главную</span>
+            </a>
+            <button onclick="goBack()"
+                    class="inline-flex items-center justify-center gap-2 border border-gray-300 hover:bg-gray-50 text-gray-700 px-6 py-3 rounded-xl transition duration-200">
+                <i class="fas fa-arrow-left"></i>
+                <span>Вернуться назад</span>
+            </button>
+            <a href="{{ url_for('create_post') }}"
+               class="inline-flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-xl transition duration-200">
+                <i class="fas fa-plus"></i>
+                <span>Создать пост</span>
+            </a>
+        </div>
+
+        <div class="mt-12 pt-8 border-t border-gray-200">
+            <p class="text-gray-500 text-sm mb-4">Возможно, вы искали:</p>
+            <div class="flex flex-wrap gap-3 justify-center">
+                <a href="{{ url_for('index') }}" class="text-indigo-600 hover:text-indigo-800 text-sm">
+                    Лента
+                </a>
+                <span class="text-gray-300">•</span>
+                <a href="{{ url_for('groups') }}" class="text-indigo-600 hover:text-indigo-800 text-sm">
+                    Сообщества
+                </a>
+                <span class="text-gray-300">•</span>
+                <a href="{{ url_for('top_week') }}" class="text-indigo-600 hover:text-indigo-800 text-sm">
+                    Топ недели
+                </a>
+                <span class="text-gray-300">•</span>
+                <a href="{{ url_for('tags_list') }}" class="text-indigo-600 hover:text-indigo-800 text-sm">
+                    Теги
+                </a>
+                <span class="text-gray-300">•</span>
+                <a href="{{ url_for('create_post') }}" class="text-indigo-600 hover:text-indigo-800 text-sm">
+                    Создать пост
+                </a>
+            </div>
+        </div>
+
+        <div class="mt-8 text-sm text-gray-400">
+            <i class="fas fa-headset mr-1"></i>
+            Если проблема повторяется,
+            <a href="#" class="text-indigo-500 hover:underline">свяжитесь с поддержкой</a>
+        </div>
+    </div>
+</div>
+
+<script>
+function goBack() {
+    window.history.back();
+}
+
+document.getElementById('searchInput').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        const query = this.value.trim();
+        if (query) {
+            window.location.href = "{{ url_for('index') }}?search=" + encodeURIComponent(query);
+        }
+    }
+});
+</script>
+{% endblock %}

@@ -36,6 +36,12 @@ from emailregister import VerificationEmailService, PasswordResetEmailService, E
 from sqlalchemy import func
 from models import Subscription
 
+from werkzeug.exceptions import NotFound
+from sqlalchemy.exc import OperationalError, TimeoutError, SQLAlchemyError
+import time
+from functools import wraps
+
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -72,6 +78,41 @@ def render_markdown(text):
             'toc'             # оглавление
         ]
     )
+
+@app.errorhandler(404)
+def page_not_found(e):
+    logger.warning(f"404 error: {request.path}")
+    return render_template('404.html'), 404
+
+@app.errorhandler(403)
+def forbidden(e):
+    logger.warning(f"403 error: {request.path} - User: {current_user.id if current_user.is_authenticated else 'anonymous'}")
+    return render_template('403.html'), 403
+
+@app.errorhandler(500)
+def internal_server_error(e):
+    logger.error(f"500 error: {str(e)}", exc_info=True)
+    return render_template('error.html'), 500
+
+@app.errorhandler(503)
+def service_unavailable(e):
+    return render_template('error.html'), 503
+
+@app.errorhandler(OperationalError)
+def handle_db_connection_error(e):
+    logger.error(f"Database connection error: {str(e)}", exc_info=True)
+    return render_template('error.html'), 503
+
+@app.errorhandler(TimeoutError)
+def handle_db_timeout(e):
+    logger.error(f"Database timeout error: {str(e)}", exc_info=True)
+    return render_template('error.html'), 503
+
+@app.errorhandler(SQLAlchemyError)
+def handle_sqlalchemy_error(e):
+    logger.error(f"SQLAlchemy error: {str(e)}", exc_info=True)
+    return render_template('error.html'), 500
+
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -635,6 +676,10 @@ def post_detail(post_id):
     post = db.session.get(Post, post_id)
     if not post:
         abort(404)
+    if post.status != 'published':
+        # Для черновиков только автор может видеть
+        if not current_user.is_authenticated or post.author_id != current_user.id:
+            abort(403)
 
     post.view_count += 1
     db.session.commit()
