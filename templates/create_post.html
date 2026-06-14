@@ -43,44 +43,166 @@
     .tag-input button:hover {
         color: #4f46e5;
     }
+    .context-banner {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+    .selected-fragment {
+        background: #fef3c7;
+        border-left: 4px solid #f59e0b;
+        padding: 0.75rem;
+        border-radius: 0.5rem;
+        font-family: monospace;
+        font-size: 0.875rem;
+        max-height: 150px;
+        overflow-y: auto;
+    }
+    .type-info {
+        background: #f3f4f6;
+        border-radius: 0.5rem;
+        padding: 0.75rem 1rem;
+    }
+    .type-locked {
+        background: #fef3c7;
+        border-left: 4px solid #f59e0b;
+    }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="max-w-4xl mx-auto">
     <div class="bg-white rounded-xl shadow-sm overflow-hidden">
-
         <div class="bg-gradient-to-r from-indigo-500 to-purple-600 px-6 py-8">
-            <h1 class="text-2xl font-bold text-white">Создать новый пост</h1>
-            <p class="text-indigo-100 mt-1">Поделитесь знаниями с сообществом</p>
+            <h1 class="text-2xl font-bold text-white">
+                {% if context_question %}
+                    Создать статью-ответ
+                {% elif context_article %}
+                    Задать вопрос о фрагменте статьи
+                {% else %}
+                    Создать новый пост
+                {% endif %}
+            </h1>
+            <p class="text-indigo-100 mt-1">
+                {% if context_question %}
+                    Напишите развёрнутый ответ на вопрос в формате статьи
+                {% elif context_article %}
+                    Задайте конкретный вопрос о выделенном фрагменте
+                {% else %}
+                    Поделитесь знаниями с сообществом
+                {% endif %}
+            </p>
         </div>
+
+        <!-- Контекстная информация -->
+        {% if context_article or context_question or selected_fragment %}
+        <div class="context-banner p-4 text-sm">
+            {% if context_article %}
+            <div class="flex items-start gap-2">
+                <i class="fas fa-book mt-0.5"></i>
+                <div>
+                    <strong>Вы задаёте вопрос к статье:</strong>
+                    <a href="{{ url_for('post_detail', post_id=context_article.id) }}" class="underline hover:no-underline text-white/90">
+                        {{ context_article.title }}
+                    </a>
+                    {% if selected_fragment %}
+                    <div class="mt-2">
+                        <div class="text-xs opacity-80 mb-1">Выделенный фрагмент:</div>
+                        <div class="selected-fragment text-gray-800">
+                            «{{ selected_fragment[:300] }}{% if selected_fragment|length > 300 %}...{% endif %}»
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% elif context_question %}
+            <div class="flex items-start gap-2">
+                <i class="fas fa-question-circle mt-0.5"></i>
+                <div>
+                    <strong>Вы отвечаете на вопрос:</strong>
+                    <a href="{{ url_for('post_detail', post_id=context_question.id) }}" class="underline hover:no-underline text-white/90">
+                        {{ context_question.title }}
+                    </a>
+                    <div class="mt-1 text-xs opacity-80">
+                        {{ context_question.content[:200] }}{% if context_question.content|length > 200 %}...{% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
 
         <!-- Форма -->
         <form method="POST" action="{{ url_for('create_post') }}" class="p-6" id="createPostForm">
-            <!-- Тип поста -->
-            <div class="mb-6">
-                <label class="block text-sm font-medium text-gray-700 mb-2">Тип поста</label>
-                <div class="flex space-x-4">
-                    <label class="flex items-center cursor-pointer">
-                        <input type="radio" name="type" value="article" checked class="mr-2" onchange="togglePostType()">
-                        <span class="flex items-center gap-2">
-                            <i class="fas fa-newspaper text-blue-600"></i>
-                            <span>Статья</span>
-                        </span>
-                    </label>
-                    <label class="flex items-center cursor-pointer">
-                        <input type="radio" name="type" value="question" class="mr-2" onchange="togglePostType()">
-                        <span class="flex items-center gap-2">
-                            <i class="fas fa-question-circle text-green-600"></i>
-                            <span>Вопрос</span>
-                        </span>
-                    </label>
+
+            <!-- Тип поста - скрытое поле при контексте -->
+            {% if context_article %}
+                <!-- Вопрос к статье-->
+                <input type="hidden" name="type" value="question">
+                <input type="hidden" name="article_context_id" value="{{ context_article.id }}">
+                {% if selected_fragment %}
+                <input type="hidden" name="fragment_ref" value="{{ selected_fragment[:100] }}">
+                {% endif %}
+
+                <div class="mb-6 type-info type-locked">
+                    <div class="flex items-center gap-2">
+                        <i class="fas fa-question-circle text-green-600 text-lg"></i>
+                        <div>
+                            <span class="font-semibold text-gray-800">Тип поста: Вопрос</span>
+                            <p class="text-xs text-gray-500 mt-0.5">
+                                <i class="fas fa-lock text-xs mr-1"></i>
+                                Тип зафиксирован, так как вы задаёте вопрос о фрагменте статьи
+                            </p>
+                        </div>
+                    </div>
                 </div>
-                <p id="typeHelp" class="text-sm text-gray-500 mt-2">
-                    <i class="fas fa-info-circle"></i>
-                    Статья — подробный материал с пояснениями. Вопрос — запрос помощи от сообщества.
-                </p>
-            </div>
+
+            {% elif context_question %}
+                <input type="hidden" name="type" value="article">
+                <input type="hidden" name="source_question_id" value="{{ context_question.id }}">
+
+                <div class="mb-6 type-info type-locked">
+                    <div class="flex items-center gap-2">
+                        <i class="fas fa-newspaper text-blue-600 text-lg"></i>
+                        <div>
+                            <span class="font-semibold text-gray-800">Тип поста: Статья</span>
+                            <p class="text-xs text-gray-500 mt-0.5">
+                                <i class="fas fa-lock text-xs mr-1"></i>
+                                Тип зафиксирован, так как вы отвечаете на вопрос развёрнутой статьёй
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+            {% else %}
+                <!-- Свободный выбор типа -->
+                <div class="mb-6">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Тип поста</label>
+                    <div class="flex space-x-4">
+                        <label class="flex items-center cursor-pointer">
+                            <input type="radio" name="type" value="article"
+                                   {% if post_type == 'article' %}checked{% endif %}
+                                   class="mr-2" onchange="togglePostType()">
+                            <span class="flex items-center gap-2">
+                                <i class="fas fa-newspaper text-blue-600"></i>
+                                <span>Статья</span>
+                            </span>
+                        </label>
+                        <label class="flex items-center cursor-pointer">
+                            <input type="radio" name="type" value="question"
+                                   {% if post_type == 'question' %}checked{% endif %}
+                                   class="mr-2" onchange="togglePostType()">
+                            <span class="flex items-center gap-2">
+                                <i class="fas fa-question-circle text-green-600"></i>
+                                <span>Вопрос</span>
+                            </span>
+                        </label>
+                    </div>
+                    <p id="typeHelp" class="text-sm text-gray-500 mt-2">
+                        <i class="fas fa-info-circle"></i>
+                        Статья — подробный материал с пояснениями. Вопрос — запрос помощи от сообщества.
+                    </p>
+                </div>
+            {% endif %}
 
             <div class="mb-6">
                 <label for="group_id" class="block text-sm font-medium text-gray-700 mb-2">
@@ -89,7 +211,9 @@
                 <select name="group_id" id="group_id" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500">
                     <option value="">Без сообщества (публичный пост)</option>
                     {% for group in groups %}
-                    <option value="{{ group.id }}">{{ group.name }} {% if group.is_private %}(приватное){% endif %}</option>
+                    <option value="{{ group.id }}" {% if request.args.get('group')|int == group.id %}selected{% endif %}>
+                        {{ group.name }} {% if group.is_private %}(приватное){% endif %}
+                    </option>
                     {% endfor %}
                 </select>
             </div>
@@ -100,7 +224,8 @@
                 </label>
                 <input type="text" id="title" name="title" required
                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                       placeholder="Например: Введение в машинное обучение или Как оптимизировать SQL запросы?">
+                       placeholder="{% if context_question %}Напишите статью-ответ...{% elif context_article %}Вопрос о фрагменте статьи...{% else %}Например: Введение в машинное обучение{% endif %}"
+                       value="{{ suggested_title if suggested_title else '' }}">
                 <div class="text-xs text-gray-400 mt-1" id="titleCounter">0 / 200</div>
             </div>
 
@@ -109,7 +234,6 @@
                     <i class="fas fa-paragraph"></i> Содержание <span class="text-red-500">*</span>
                 </label>
 
-                <!-- редактор -->
                 <div class="editor-toolbar">
                     <button type="button" onclick="formatText('bold')" title="Жирный">
                         <i class="fas fa-bold"></i>
@@ -136,7 +260,7 @@
 
                 <textarea id="content" name="content" rows="15" required
                           class="editor-content w-full px-3 py-2 border border-gray-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono"
-                          placeholder="Напишите содержание поста... Используйте кнопки форматирования для стилизации."></textarea>
+                          placeholder="Напишите содержание поста..."></textarea>
 
                 <div class="text-xs text-gray-400 mt-1" id="contentCounter">0 символов</div>
             </div>
@@ -153,7 +277,6 @@
                 <input type="hidden" name="tags" id="tagsHidden">
                 <p class="text-xs text-gray-400 mt-1">
                     <i class="fas fa-info-circle"></i> Теги помогают другим пользователям находить ваш пост.
-                    Примеры: python, sql, машинное_обучение
                 </p>
             </div>
 
@@ -167,7 +290,8 @@
             </div>
 
             <div class="flex justify-end gap-3 pt-4 border-t">
-                <a href="{{ url_for('index') }}" class="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition">
+                <a href="{% if context_article %}{{ url_for('post_detail', post_id=context_article.id) }}{% elif context_question %}{{ url_for('post_detail', post_id=context_question.id) }}{% else %}{{ url_for('index') }}{% endif %}"
+                   class="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition">
                     Отмена
                 </a>
                 <button type="submit" class="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">
@@ -182,10 +306,20 @@
             <i class="fas fa-lightbulb"></i> Советы по написанию качественного поста
         </h3>
         <div class="text-sm text-blue-700 space-y-1">
-            <p>✓ <strong>Для статьи:</strong> Используйте заголовки, списки и примеры кода для лучшего восприятия.</p>
-            <p>✓ <strong>Для вопроса:</strong> Опишите проблему подробно, приложите код и сообщение об ошибке.</p>
-            <p>✓ Добавьте релевантные теги для привлечения аудитории.</p>
-            <p>✓ Проверьте орфографию перед публикацией.</p>
+            {% if context_question %}
+                <p>✓ <strong>Статья-ответ на вопрос:</strong> Опишите решение подробно, приведите примеры кода.</p>
+                <p>✓ Ссылайтесь на исходный вопрос и объясните, как ваша статья решает поставленную проблему.</p>
+                <p>✓ Добавьте релевантные теги для лучшего поиска.</p>
+            {% elif context_article %}
+                <p>✓ <strong>Вопрос о фрагменте статьи:</strong> Укажите конкретный фрагмент, который вызвал вопрос.</p>
+                <p>✓ Опишите, что именно вам непонятно или требует разъяснения.</p>
+                <p>✓ Будьте максимально конкретны, чтобы автор статьи мог дать точный ответ.</p>
+            {% else %}
+                <p>✓ <strong>Для статьи:</strong> Используйте заголовки, списки и примеры кода для лучшего восприятия.</p>
+                <p>✓ <strong>Для вопроса:</strong> Опишите проблему подробно, приложите код и сообщение об ошибке.</p>
+                <p>✓ Добавьте релевантные теги для привлечения аудитории.</p>
+                <p>✓ Проверьте орфографию перед публикацией.</p>
+            {% endif %}
         </div>
     </div>
 </div>
@@ -212,7 +346,6 @@ contentInput.addEventListener('input', function() {
     contentCounter.textContent = `${count} символов`;
 });
 
-
 function togglePostType() {
     const type = document.querySelector('input[name="type"]:checked').value;
     const helpText = document.getElementById('typeHelp');
@@ -226,7 +359,7 @@ function togglePostType() {
     }
 }
 
-
+// Форматирование текста
 function formatText(type) {
     const textarea = document.getElementById('content');
     const start = textarea.selectionStart;
@@ -294,6 +427,7 @@ function insertCodeBlock() {
     textarea.setSelectionRange(start + codeBlock.length, start + codeBlock.length);
 }
 
+// Теги
 const tags = new Set();
 const tagsContainer = document.getElementById('tagsContainer');
 const tagInput = document.getElementById('tagInput');

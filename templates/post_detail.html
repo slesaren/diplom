@@ -2,8 +2,6 @@
 {% set full_width_content = true %}
 {% block title %}{{ post.title }} — QArticle{% endblock %}
 
-{% set full_width_content = true %}
-
 {% block extra_css %}
 <style>
     .comment-tree {
@@ -63,6 +61,35 @@
         color: #475569;
         font-style: italic;
     }
+
+    /* Стили для выделения текста */
+    .content-html ::selection {
+        background: #fbbf24;
+        color: #1f2937;
+    }
+
+    /* Всплывающее окно для вопроса */
+    .floating-ask-popup {
+        position: fixed;
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+        border: 1px solid #e5e7eb;
+        z-index: 1000;
+        animation: fadeInUp 0.2s ease;
+    }
+
+    @keyframes fadeInUp {
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
     .comment-actions {
         display: flex;
         gap: 0.5rem;
@@ -98,6 +125,30 @@
     }
     .post-menu-dropdown.show {
         display: block;
+    }
+
+    /* Toast уведомления */
+    .toast-notification {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1100;
+        padding: 12px 20px;
+        border-radius: 8px;
+        color: white;
+        font-size: 14px;
+        animation: slideInRight 0.3s ease;
+    }
+
+    @keyframes slideInRight {
+        from {
+            transform: translateX(100%);
+            opacity: 0;
+        }
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
     }
 </style>
 {% endblock %}
@@ -176,10 +227,8 @@
                 {% endif %}
             </div>
 
-            <div class="p-6 content-html">
-                 <!-- {{ post.content|safe }} -->
+            <div class="p-6 content-html" id="postContent">
                 {{ post_html|safe }}
-
             </div>
 
             <div class="px-6 py-4 bg-gray-50 border-t border-gray-100 flex items-center justify-between">
@@ -222,6 +271,40 @@
             </div>
         </article>
 
+        <!-- Связанный контекст статья вопрос -->
+        {% if post.type == 'question' and post.article_context %}
+        <div class="mt-4 bg-blue-50 rounded-lg p-3 border-l-4 border-blue-500">
+            <div class="flex items-start gap-2">
+                <i class="fas fa-book text-blue-600 mt-0.5"></i>
+                <div class="text-sm">
+                    <span class="font-semibold">Контекст:</span> Этот вопрос задан о фрагменте статьи
+                    <a href="{{ url_for('post_detail', post_id=post.article_context.id) }}" class="text-blue-600 hover:underline">
+                        «{{ post.article_context.title }}»
+                    </a>
+                    {% if post.fragment_ref %}
+                    <div class="mt-2 p-2 bg-white rounded text-gray-600 text-xs font-mono">
+                        «{{ post.fragment_ref }}»
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if post.type == 'article' and post.source_question %}
+        <div class="mt-4 bg-green-50 rounded-lg p-3 border-l-4 border-green-500">
+            <div class="flex items-start gap-2">
+                <i class="fas fa-question-circle text-green-600 mt-0.5"></i>
+                <div class="text-sm">
+                    <span class="font-semibold">Это статья-ответ на вопрос:</span>
+                    <a href="{{ url_for('post_detail', post_id=post.source_question.id) }}" class="text-green-600 hover:underline">
+                        «{{ post.source_question.title }}»
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
         <!-- Для вопроса: форма ответа -->
         {% if post.type == 'question' %}
         <div class="mt-8 bg-white rounded-xl shadow-sm p-6">
@@ -232,7 +315,11 @@
                 <textarea name="content" rows="6" required
                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                           placeholder="Напишите ваш ответ..."></textarea>
-                <div class="mt-4 flex justify-end">
+                <div class="mt-4 flex justify-between items-center">
+                    <a href="{{ url_for('create_post') }}?type=article&question_id={{ post.id }}"
+                       class="text-indigo-600 hover:text-indigo-800 text-sm flex items-center gap-1">
+                        <i class="fas fa-newspaper"></i> Или ответить развёрнутой статьёй
+                    </a>
                     <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg transition">
                         <i class="fas fa-paper-plane mr-2"></i> Опубликовать ответ
                     </button>
@@ -388,7 +475,7 @@
         </div>
         {% endif %}
 
-        <!-- Комментарии для статьи -->
+
         {% if post.type == 'article' and post.comments %}
         <div class="mt-8">
             <h3 class="text-xl font-bold mb-4">Комментарии ({{ post.comments|length }})</h3>
@@ -520,7 +607,6 @@
         </div>
         {% endif %}
 
-        <!-- Форма комментария для статьи -->
         {% if post.type == 'article' %}
         <div class="mt-8 bg-white rounded-xl shadow-sm p-6">
             <h3 class="text-xl font-bold mb-4">Добавить комментарий</h3>
@@ -610,8 +696,38 @@
     </div>
 </div>
 
+{% if post.type == 'article' %}
+<div id="askPopup" class="floating-ask-popup hidden">
+    <div class="p-4 min-w-[280px] max-w-sm">
+        <div class="flex items-start justify-between mb-3">
+            <div class="flex items-center gap-2">
+                <i class="fas fa-question-circle text-green-600"></i>
+                <h4 class="font-semibold text-gray-800">Задать вопрос</h4>
+            </div>
+            <button onclick="closeAskPopup()" class="text-gray-400 hover:text-gray-600">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <p class="text-sm text-gray-600 mb-3">Задать вопрос о выделенном фрагменте?</p>
+        <div id="selectedFragmentPreview" class="bg-gray-50 rounded-lg p-2 mb-3 text-xs text-gray-500 max-h-24 overflow-y-auto">
+            <!-- сюда будет вставлен выделенный текст -->
+        </div>
+        <div class="flex gap-2">
+            <button onclick="askAboutFragment()" class="flex-1 bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded-lg text-sm transition">
+                <i class="fas fa-question-circle mr-1"></i> Задать вопрос
+            </button>
+            <button onclick="closeAskPopup()" class="px-3 py-2 border rounded-lg text-sm hover:bg-gray-50 transition">
+                Отмена
+            </button>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 <script>
-// Improved dropdown menu
+let currentSelection = '';
+let popupVisible = false;
+
 document.addEventListener('DOMContentLoaded', function() {
     const menuButton = document.getElementById('postMenuButton');
     const menuDropdown = document.getElementById('postMenuDropdown');
@@ -620,7 +736,6 @@ document.addEventListener('DOMContentLoaded', function() {
             e.stopPropagation();
             menuDropdown.classList.toggle('show');
         });
-        // Close when clicking outside
         document.addEventListener('click', function(e) {
             if (!menuButton.contains(e.target) && !menuDropdown.contains(e.target)) {
                 menuDropdown.classList.remove('show');
@@ -628,7 +743,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Delete post handler
     const deleteBtn = document.getElementById('deletePostBtn');
     if (deleteBtn) {
         deleteBtn.addEventListener('click', function(e) {
@@ -636,21 +750,109 @@ document.addEventListener('DOMContentLoaded', function() {
             if (confirm('Вы уверены, что хотите удалить этот пост? Это действие нельзя отменить.')) {
                 fetch('/post/{{ post.id }}/delete', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    }
+                    headers: { 'Content-Type': 'application/json' }
                 }).then(response => response.json())
                   .then(data => {
-                      if (data.success) {
-                          window.location.href = '/';
-                      } else {
-                          alert('Ошибка при удалении поста');
-                      }
+                      if (data.success) window.location.href = '/';
+                      else alert('Ошибка при удалении поста');
                   });
             }
         });
     }
+
+    // Инициализация обработчика выделения текста
+    {% if post.type == 'article' %}
+    initTextSelection();
+    {% endif %}
 });
+
+// выделение текста
+function initTextSelection() {
+    const postContent = document.getElementById('postContent');
+    if (!postContent) return;
+
+    let selectionTimeout;
+
+    document.addEventListener('mouseup', function(e) {
+        // Не показываем попап при клике на кнопки и ссылки
+        if (e.target.closest('button') || e.target.closest('a')) return;
+
+        const selection = window.getSelection();
+        const selectedText = selection.toString().trim();
+
+        // Очищаем предыдущий таймаут
+        if (selectionTimeout) clearTimeout(selectionTimeout);
+
+        if (selectedText.length > 0 && selectedText.length <= 500) {
+            // Проверяем, что выделение внутри содержимого поста
+            if (postContent.contains(selection.anchorNode)) {
+                currentSelection = selectedText;
+
+                // Получаем координаты для позиционирования попапа
+                const range = selection.getRangeAt(0);
+                const rect = range.getBoundingClientRect();
+
+                selectionTimeout = setTimeout(() => {
+                    showAskPopup(rect, selectedText);
+                }, 300);
+            }
+        } else {
+            setTimeout(() => {
+                if (!document.getElementById('askPopup')?.matches(':hover')) {
+                    closeAskPopup();
+                }
+            }, 200);
+        }
+    });
+
+    window.addEventListener('scroll', function() {
+        closeAskPopup();
+    });
+}
+
+function showAskPopup(rect, selectedText) {
+    const popup = document.getElementById('askPopup');
+    const preview = document.getElementById('selectedFragmentPreview');
+    if (!popup || !preview) return;
+
+    preview.textContent = selectedText.length > 200 ? selectedText.substring(0, 200) + '...' : selectedText;
+    const popupRect = popup.getBoundingClientRect();
+    let top = rect.top - popupRect.height - 10;
+    let left = rect.left + (rect.width / 2) - (popupRect.width / 2);
+
+    if (top < 10) {
+        top = rect.bottom + 10;
+    }
+    if (left < 10) {
+        left = 10;
+    }
+    if (left + popupRect.width > window.innerWidth - 10) {
+        left = window.innerWidth - popupRect.width - 10;
+    }
+
+    popup.style.top = top + 'px';
+    popup.style.left = left + 'px';
+    popup.classList.remove('hidden');
+    popupVisible = true;
+}
+
+function closeAskPopup() {
+    const popup = document.getElementById('askPopup');
+    if (popup) {
+        popup.classList.add('hidden');
+        popupVisible = false;
+    }
+    currentSelection = '';
+}
+
+function askAboutFragment() {
+    if (currentSelection.length > 0) {
+        const url = "{{ url_for('create_post') }}?type=question&article_id={{ post.id }}&fragment=" + encodeURIComponent(currentSelection);
+        window.location.href = url;
+    } else {
+        showToast('Не удалось получить выделенный текст', 'error');
+    }
+}
 
 // Голосование за посты и комментарии
 document.querySelectorAll('.vote-up-btn, .vote-down-btn').forEach(btn => {
@@ -669,9 +871,7 @@ document.querySelectorAll('.vote-up-btn, .vote-down-btn').forEach(btn => {
         try {
             const response = await fetch('/vote', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     target_type: targetType,
                     target_id: parseInt(targetId),
@@ -717,9 +917,7 @@ document.querySelectorAll('.vote-up-btn, .vote-down-btn').forEach(btn => {
 
 function showToast(message, type) {
     const toast = document.createElement('div');
-    toast.className = `fixed bottom-4 right-4 z-50 px-4 py-2 rounded-lg shadow-lg text-white transition-opacity duration-300 ${
-        type === 'success' ? 'bg-green-500' : 'bg-red-500'
-    }`;
+    toast.className = `toast-notification ${type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : 'bg-blue-500'}`;
     toast.textContent = message;
     document.body.appendChild(toast);
 
@@ -738,9 +936,7 @@ document.querySelectorAll('.bookmark-btn').forEach(btn => {
         try {
             const response = await fetch(`/bookmark/${postId}`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                }
+                headers: { 'Content-Type': 'application/json' }
             });
 
             const data = await response.json();
@@ -763,16 +959,12 @@ document.querySelectorAll('.bookmark-btn').forEach(btn => {
 // Показать/скрыть форму ответа
 function showReplyForm(commentId) {
     const form = document.getElementById(`reply-form-${commentId}`);
-    if (form) {
-        form.classList.remove('hidden');
-    }
+    if (form) form.classList.remove('hidden');
 }
 
 function hideReplyForm(commentId) {
     const form = document.getElementById(`reply-form-${commentId}`);
-    if (form) {
-        form.classList.add('hidden');
-    }
+    if (form) form.classList.add('hidden');
 }
 
 // Удалить комментарий
@@ -782,9 +974,7 @@ async function deleteComment(commentId) {
     try {
         const response = await fetch(`/comment/${commentId}/delete`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            }
+            headers: { 'Content-Type': 'application/json' }
         });
 
         if (response.ok) {
@@ -806,9 +996,7 @@ async function acceptAnswer(answerId) {
     try {
         const response = await fetch(`/accept_answer/${answerId}`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            }
+            headers: { 'Content-Type': 'application/json' }
         });
 
         const data = await response.json();
@@ -841,9 +1029,7 @@ async function subscribeUser(userId) {
     try {
         const response = await fetch('/subscribe', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 target_type: 'author',
                 target_id: userId

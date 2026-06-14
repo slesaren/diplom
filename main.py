@@ -726,20 +726,51 @@ def post_detail(post_id):
                            bookmarked_post_ids=bookmarked_post_ids)
 
 
-
 @app.route('/create', methods=['GET', 'POST'])
 @login_required
 def create_post():
+    post_type = request.args.get('type', 'article')
+    article_id = request.args.get('article_id', type=int)
+    question_id = request.args.get('question_id', type=int)
+    fragment = request.args.get('fragment', '')
+    group_id_param = request.args.get('group', type=int)
+
+    context_article = None
+    context_question = None
+    selected_fragment = fragment
+    suggested_title = ''
+
+    if article_id and post_type == 'question':
+        context_article = db.session.get(Article, article_id)
+        if context_article:
+            suggested_title = f"Вопрос о фрагменте статьи: {context_article.title[:50]}"
+
+    if question_id and post_type == 'article':
+        context_question = db.session.get(Question, question_id)
+        if context_question:
+            suggested_title = f"Ответ на вопрос: {context_question.title[:50]}"
+
     if request.method == 'POST':
         post_type = request.form.get('type')
         title = request.form.get('title', '').strip()
         content = request.form.get('content', '').strip()
         group_id = request.form.get('group_id')
         tags_input = request.form.get('tags', '').strip()
+        is_draft = request.form.get('is_draft') == 'on'
+
+        article_context_id = request.form.get('article_context_id', type=int)
+        fragment_ref = request.form.get('fragment_ref', '')
+        source_question_id = request.form.get('source_question_id', type=int)
 
         if not title or not content:
             flash('Заполните заголовок и содержание', 'danger')
-            return render_template('create_post.html')
+            return render_template('create_post.html',
+                                   groups=Group.query.all(),
+                                   post_type=post_type,
+                                   context_article=context_article,
+                                   context_question=context_question,
+                                   selected_fragment=selected_fragment,
+                                   suggested_title=suggested_title)
 
         group_id = int(group_id) if group_id and group_id.isdigit() else None
         if group_id:
@@ -748,7 +779,7 @@ def create_post():
                 membership = UserGroup.query.filter_by(user_id=current_user.id, group_id=group_id).first()
                 if not membership and group.owner_id != current_user.id:
                     flash('У вас нет доступа к этой группе', 'danger')
-                    return render_template('create_post.html')
+                    return render_template('create_post.html', groups=Group.query.all())
 
         if post_type == 'article':
             post = Article(
@@ -757,8 +788,12 @@ def create_post():
                 content=content,
                 author_id=current_user.id,
                 group_id=group_id,
-                is_curated=False
+                is_curated=False,
+                status='draft' if is_draft else 'published'
             )
+
+            if source_question_id:
+                post.source_question_id = source_question_id
         else:
             post = Question(
                 type='question',
@@ -766,8 +801,14 @@ def create_post():
                 content=content,
                 author_id=current_user.id,
                 group_id=group_id,
-                is_resolved=False
+                is_resolved=False,
+                status='draft' if is_draft else 'published'
             )
+
+            if article_context_id:
+                post.article_context_id = article_context_id
+            if fragment_ref:
+                post.fragment_ref = fragment_ref[:100]
 
         db.session.add(post)
         db.session.commit()
@@ -788,8 +829,13 @@ def create_post():
         return redirect(url_for('post_detail', post_id=post.id))
 
     groups = Group.query.all() if current_user.is_authenticated else []
-    return render_template('create_post.html', groups=groups)
-
+    return render_template('create_post.html',
+                           groups=groups,
+                           post_type=post_type,
+                           context_article=context_article,
+                           context_question=context_question,
+                           selected_fragment=selected_fragment,
+                           suggested_title=suggested_title)
 
 @app.route('/post/<int:post_id>/edit', methods=['GET', 'POST'])
 @login_required
