@@ -14,7 +14,7 @@ import os
 from flask_login import UserMixin, LoginManager, login_user, current_user, login_required, logout_user
 from config import Config
 from models import db, User, Post, Tag, PostTag, Comment, Vote, Group, UserGroup, Article, Question, Bookmark, \
-    Subscription
+    Subscription, UserAchievement, Report, ModerationAction
 from redis_utils import RedisBookStats
 
 from flask_sqlalchemy import SQLAlchemy
@@ -112,6 +112,125 @@ def handle_db_timeout(e):
 def handle_sqlalchemy_error(e):
     logger.error(f"SQLAlchemy error: {str(e)}", exc_info=True)
     return render_template('error.html'), 500
+
+
+REPUTATION_RULES = {
+    'post_created': 5,  # Создание поста
+    'comment_created': 2,  # Создание комментария
+    'answer_accepted': 20,  # Ответ принят как правильный
+    'post_upvote_received': 10,  # Получен лайк на пост
+    'comment_upvote_received': 5,  # Получен лайк на комментарий
+    'post_downvote_received': -2,  # Получен дизлайк на пост
+    'comment_downvote_received': -1,  # Получен дизлайк на комментарий
+    'article_curated': 50,  # Статья отобрана в curated
+    'helpful_answer': 15,  # Полезный ответ (отмечен автором)
+    'first_post_bonus': 10,  # Бонус за первый пост
+    'first_comment_bonus': 5,  # Бонус за первый комментарий
+    'daily_bonus': 1,  # Ежедневный бонус за активность
+}
+
+
+def update_user_stats(user_id):
+    user = db.session.get(User, user_id)
+    if not user:
+        return
+
+    user.posts_count = Post.query.filter_by(author_id=user_id, status='published').count()
+    user.comments_count = Comment.query.filter_by(author_id=user_id).count()
+
+    user.helpful_answers_given = Comment.query.filter_by(author_id=user_id, is_answer=True).join(
+        Question, Comment.question_id == Question.id
+    ).filter(Question.accepted_answer_id == Comment.id).count()
+
+    user.articles_written = Article.query.filter_by(author_id=user_id, status='published').count()
+    user.questions_asked = Question.query.filter_by(author_id=user_id, status='published').count()
+
+    user.helpful_votes_received = Vote.query.filter(
+        Vote.target_type == 'comment',
+        Vote.value == 1,
+        Vote.target_id.in_(db.session.query(Comment.id).filter_by(author_id=user_id))
+    ).count()
+
+    db.session.commit()
+
+
+def add_achievement(user_id, achievement_type):
+    existing = UserAchievement.query.filter_by(user_id=user_id, achievement_type=achievement_type).first()
+    if not existing:
+        achievement = UserAchievement(user_id=user_id, achievement_type=achievement_type)
+        db.session.add(achievement)
+        db.session.commit()
+
+        achievement_bonus = {
+            'first_post': 10,
+            'first_comment': 5,
+            'first_upvote': 5,
+            'helper_10': 50,
+            'helper_100': 200,
+            'popular_article': 100,
+            'question_expert': 100,
+        }.get(achievement_type, 0)
+
+        if achievement_bonus:
+            user = db.session.get(User, user_id)
+            user.add_reputation(achievement_bonus,
+                                f"Достижение: {UserAchievement.ACHIEVEMENTS.get(achievement_type, achievement_type)}")
+            db.session.commit()
+
+
+def update_group_karma(user_id, group_id, action):
+    membership = UserGroup.query.filter_by(user_id=user_id, group_id=group_id).first()
+    if membership:
+        karma_rules = {
+            'post_in_group': 10,
+            'comment_in_group': 3,
+            'answer_accepted_in_group': 30,
+            'helpful_comment': 5,
+        }
+        points = karma_rules.get(action, 0)
+        membership.add_karma(points)
+        db.session.commit()
+
+
+def permission_required(permission):
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if not current_user.is_authenticated:
+                flash('Пожалуйста, войдите в систему', 'warning')
+                return redirect(url_for('login', next=request.url))
+
+            if current_user.is_banned:
+                flash(f'Ваш аккаунт забанен до {current_user.banned_until.strftime("%d.%m.%Y")}', 'danger')
+                return redirect(url_for('index'))
+
+            if permission == 'create_post':
+                can, msg = current_user.can_create_post()
+                if not can:
+                    flash(msg, 'danger')
+                    return redirect(url_for('index'))
+
+            elif permission == 'vote':
+                can, msg = current_user.can_vote()
+                if not can:
+                    flash(msg, 'warning')
+                    return redirect(url_for('index'))
+
+            elif permission == 'moderate':
+                if not current_user.can_moderate():
+                    flash('У вас нет прав модератора', 'danger')
+                    return redirect(url_for('index'))
+
+            elif permission == 'admin':
+                if not current_user.is_admin:
+                    flash('Требуются права администратора', 'danger')
+                    return redirect(url_for('index'))
+
+            return f(*args, **kwargs)
+
+        return decorated_function
+
+    return decorator
 
 
 @login_manager.user_loader
@@ -965,7 +1084,6 @@ def delete_comment(comment_id):
     return redirect(url_for('post_detail', post_id=post_id))
 
 
-
 @app.route('/vote', methods=['POST'])
 @login_required
 def vote():
@@ -995,20 +1113,24 @@ def vote():
     ).first()
 
     delta = 0
+    new_user_vote_value = value
 
     if value == 0:
         if existing_vote:
             delta = -existing_vote.value
             db.session.delete(existing_vote)
+            new_user_vote_value = 0
     else:
         if existing_vote:
             if existing_vote.value == value:
                 delta = -value
                 db.session.delete(existing_vote)
-                value = 0
+                new_user_vote_value = 0
             else:
-                delta = 2 * value
+                # голос с -1 на 1 или с 1 на -1
+                delta = 2 * value  # -1 -> 1: delta = 2; 1 -> -1: delta = -2
                 existing_vote.value = value
+                new_user_vote_value = value
         else:
             vote = Vote(
                 user_id=current_user.id,
@@ -1018,28 +1140,31 @@ def vote():
             )
             db.session.add(vote)
             delta = value
+            new_user_vote_value = value
 
     if delta != 0:
         target.rating += delta
 
         author = db.session.get(User, target.author_id)
-        if author:
-            author.reputation += delta
+        if author and author.id != current_user.id:
+            if target_type == 'post':
+                rep_change = REPUTATION_RULES['post_upvote_received'] if value == 1 else REPUTATION_RULES[
+                    'post_downvote_received']
+                author.add_reputation(rep_change, f"{'Лайк' if value == 1 else 'Дизлайк'} на пост")
 
-    db.session.commit()
+                if target.rating >= 100:
+                    add_achievement(target.author_id, 'popular_article')
+            elif target_type == 'comment':
+                rep_change = REPUTATION_RULES['comment_upvote_received'] if value == 1 else REPUTATION_RULES[
+                    'comment_downvote_received']
+                author.add_reputation(rep_change, f"{'Лайк' if value == 1 else 'Дизлайк'} на комментарий")
 
-    current_vote = 0
-    if value != 0:
-        current_vote = value
-    elif existing_vote and existing_vote.value == value:
-        current_vote = 0
-    elif existing_vote:
-        current_vote = existing_vote.value
+        db.session.commit()
 
     return jsonify({
         'success': True,
         'new_rating': target.rating,
-        'user_vote': current_vote
+        'user_vote': new_user_vote_value
     })
 
 
@@ -1299,6 +1424,62 @@ def top_week():
                            stats=stats)
 
 
+@app.route('/admin')
+@login_required
+@permission_required('admin')
+def admin_panel():
+    users = User.query.order_by(User.created_at.desc()).all()
+    pending_reports = Report.query.filter_by(status='pending').order_by(Report.created_at.desc()).all()
+    return render_template('admin_panel.html', users=users, pending_reports=pending_reports)
+
+
+@app.route('/admin/ban_user', methods=['POST'])
+@login_required
+@permission_required('admin')
+def ban_user():
+    data = request.get_json()
+    user = db.session.get(User, data['user_id'])
+
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+
+    days = int(data.get('days', 7))
+    user.banned_until = datetime.utcnow() + timedelta(days=days)
+    user.ban_reason = data.get('reason', '')
+    user.is_active = False
+
+    action = ModerationAction(
+        moderator_id=current_user.id,
+        action_type='ban',
+        target_type='user',
+        target_id=user.id,
+        reason=user.ban_reason,
+        duration_days=days
+    )
+    db.session.add(action)
+    db.session.commit()
+
+    return jsonify({'success': True})
+
+
+@app.route('/admin/change_role', methods=['POST'])
+@login_required
+@permission_required('admin')
+def change_role():
+    data = request.get_json()
+    user = db.session.get(User, data['user_id'])
+
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+
+    new_role = data.get('role')
+    if new_role not in ['new_user', 'user', 'moderator', 'admin']:
+        return jsonify({'error': 'Invalid role'}), 400
+
+    user.role = new_role
+    db.session.commit()
+
+    return jsonify({'success': True})
 
 
 @app.route('/debug_session')

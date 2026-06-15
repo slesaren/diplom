@@ -23,14 +23,58 @@ class User(UserMixin, db.Model):
     is_deleted = db.Column(db.Boolean, default=False)
     deleted_at = db.Column(db.DateTime, nullable=True)
 
-    articles = db.relationship('Article', backref='author', lazy=True, foreign_keys='Article.author_id', cascade='all')
-    questions = db.relationship('Question', backref='author', lazy=True, foreign_keys='Question.author_id', cascade='all')
-    comments = db.relationship('Comment', backref='author', lazy=True, cascade='all')
-    votes = db.relationship('Vote', backref='user', lazy=True, cascade='all, delete-orphan')
-    bookmarks = db.relationship('Bookmark', backref='user', lazy=True, cascade='all, delete-orphan')
-    subscriptions = db.relationship('Subscription', backref='user', lazy=True, cascade='all, delete-orphan')
-    group_memberships = db.relationship('UserGroup', backref='user', lazy=True, cascade='all, delete-orphan')
-    owned_groups = db.relationship('Group', backref='owner', lazy=True, cascade='all')
+    role = db.Column(db.String(20), default='new_user')
+    banned_until = db.Column(db.DateTime, nullable=True)
+    ban_reason = db.Column(db.Text, nullable=True)
+
+    # Статистика для расчёта кармы
+    posts_count = db.Column(db.Integer, default=0)
+    comments_count = db.Column(db.Integer, default=0)
+    helpful_votes_received = db.Column(db.Integer, default=0)
+    helpful_answers_given = db.Column(db.Integer, default=0)
+    articles_written = db.Column(db.Integer, default=0)
+    questions_asked = db.Column(db.Integer, default=0)
+
+    achievements = db.relationship('UserAchievement', back_populates='user', cascade='all, delete-orphan')
+    moderation_actions_done = db.relationship('ModerationAction',
+                                              foreign_keys='ModerationAction.moderator_id',
+                                              back_populates='moderator',
+                                              lazy=True,
+                                              cascade='all, delete-orphan')
+
+    reports_created = db.relationship('Report',
+                                      foreign_keys='Report.reporter_id',
+                                      back_populates='reporter',
+                                      lazy=True,
+                                      cascade='all, delete-orphan')
+
+    reports_resolved = db.relationship('Report',
+                                       foreign_keys='Report.resolved_by',
+                                       back_populates='resolver',
+                                       lazy=True)
+
+    articles = db.relationship('Article', backref='author', lazy=True,
+                               foreign_keys='Article.author_id',
+                               cascade='all')
+    questions = db.relationship('Question', backref='author', lazy=True,
+                                foreign_keys='Question.author_id',
+                                cascade='all')
+    comments = db.relationship('Comment', backref='author', lazy=True,
+                               cascade='all')
+    votes = db.relationship('Vote', backref='user', lazy=True,
+                            cascade='all, delete-orphan')
+    bookmarks = db.relationship('Bookmark', backref='user', lazy=True,
+                                cascade='all, delete-orphan')
+    subscriptions = db.relationship('Subscription', backref='user', lazy=True,
+                                    cascade='all, delete-orphan')
+    group_memberships = db.relationship('UserGroup', backref='user', lazy=True,
+                                        cascade='all, delete-orphan')
+    owned_groups = db.relationship('Group', backref='owner', lazy=True,
+                                   cascade='all')
+
+    __table_args__ = (
+        CheckConstraint("role IN ('new_user', 'user', 'moderator', 'admin')", name='check_user_role'),
+    )
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
@@ -51,6 +95,75 @@ class User(UserMixin, db.Model):
         self.email = f"deleted_{self.id}@deleted.qarticle"
         self.avatar_url = '/static/default-avatar.png'
         self.bio = "Пользователь удалён"
+
+    @property
+    def is_new_user(self):
+        return self.role == 'new_user'
+
+    @property
+    def is_regular_user(self):
+        return self.role == 'user'
+
+    @property
+    def is_moderator(self):
+        return self.role in ('moderator', 'admin')
+
+    @property
+    def is_admin(self):
+        return self.role == 'admin'
+
+    @property
+    def is_banned(self):
+        if self.banned_until and self.banned_until > datetime.utcnow():
+            return True
+        return False
+
+    def can_create_post(self):
+        if self.is_banned:
+            return False, "Вы забанены до " + self.banned_until.strftime('%d.%m.%Y')
+        return True, ""
+
+    def can_comment(self):
+        if self.is_banned:
+            return False, "Вы забанены"
+        return True, ""
+
+    def can_vote(self):
+        if self.is_banned:
+            return False, "Забаненные пользователи не могут голосовать"
+        if self.is_new_user:
+            return False, "Новые пользователи не могут голосовать до получения 10 репутации"
+        return True, ""
+
+    def can_moderate(self, target_user=None):
+        if self.is_admin:
+            return True
+        if self.is_moderator:
+            if target_user and target_user.is_admin:
+                return False
+            return True
+        return False
+
+    def update_role_by_reputation(self):
+        if self.reputation >= 500 and self.role != 'admin':
+            self.role = 'moderator'
+        elif self.reputation >= 100 and self.role not in ('moderator', 'admin'):
+            self.role = 'user'
+        elif self.reputation < 100 and self.role not in ('moderator', 'admin'):
+            self.role = 'new_user'
+
+    def add_reputation(self, points, reason=''):
+        self.reputation += points
+        self.update_role_by_reputation()
+
+        rep_log = ReputationLog(
+            user_id=self.id,
+            points_change=points,
+            reason=reason,
+            new_reputation=self.reputation
+        )
+        db.session.add(rep_log)
+
 
 
 class Group(db.Model):
@@ -74,15 +187,31 @@ class Group(db.Model):
 class UserGroup(db.Model):
     __tablename__ = 'user_groups'
 
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), primary_key=True)
-    group_id = db.Column(db.Integer, db.ForeignKey('groups.id'), primary_key=True)
-    role = db.Column(db.String(20), default='member')
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), primary_key=True)
+    group_id = db.Column(db.Integer, db.ForeignKey('groups.id', ondelete='CASCADE'), primary_key=True)
+    role = db.Column(db.String(20), default='member')  # member, moderator, admin
     karma_in_group = db.Column(db.Integer, default=0)
     joined_at = db.Column(db.DateTime, default=datetime.utcnow)
+    posts_count_in_group = db.Column(db.Integer, default=0)
+    helpful_answers_in_group = db.Column(db.Integer, default=0)
 
     __table_args__ = (
         CheckConstraint("role IN ('member', 'moderator', 'admin')", name='check_user_group_role'),
     )
+
+    def update_group_role(self):
+        if self.karma_in_group >= 1000:
+            self.role = 'admin'
+        elif self.karma_in_group >= 500:
+            self.role = 'moderator'
+        else:
+            self.role = 'member'
+
+    def add_karma(self, points, session=None):
+        self.karma_in_group += points
+        self.update_group_role()
+        if session:
+            session.commit()
 
 
 class Post(db.Model):
@@ -235,4 +364,79 @@ class Subscription(db.Model):
 
     __table_args__ = (
         CheckConstraint("target_type IN ('author', 'tag', 'group')", name='check_subscription_target_type'),
+    )
+
+
+class ReputationLog(db.Model):
+    __tablename__ = 'reputation_logs'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    points_change = db.Column(db.Integer, nullable=False)
+    reason = db.Column(db.String(200))
+    new_reputation = db.Column(db.Integer)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship('User', backref='reputation_logs')
+
+
+class UserAchievement(db.Model):
+    __tablename__ = 'user_achievements'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    achievement_type = db.Column(db.String(50), nullable=False)
+    achieved_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship('User', back_populates='achievements')
+
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'achievement_type', name='unique_user_achievement'),
+    )
+
+    ACHIEVEMENTS = {
+        'first_post': 'Первый пост',
+        'first_comment': 'Первый комментарий',
+        'first_upvote': 'Первый лайк',
+        'helper_10': 'Помощник (10 ответов)',
+        'helper_100': 'Эксперт (100 ответов)',
+        'popular_article': 'Популярная статья (100+ лайков)',
+        'question_expert': 'Мастер вопросов (50 вопросов)',
+    }
+
+
+class ModerationAction(db.Model):
+    __tablename__ = 'moderation_actions'
+
+    id = db.Column(db.Integer, primary_key=True)
+    moderator_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=False)
+    action_type = db.Column(db.String(50), nullable=False)
+    target_type = db.Column(db.String(20), nullable=False)
+    target_id = db.Column(db.Integer, nullable=False)
+    reason = db.Column(db.Text)
+    duration_days = db.Column(db.Integer, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    moderator = db.relationship('User', foreign_keys=[moderator_id], back_populates='moderation_actions_done')
+
+
+class Report(db.Model):
+    __tablename__ = 'reports'
+
+    id = db.Column(db.Integer, primary_key=True)
+    reporter_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=False)
+    target_type = db.Column(db.String(20), nullable=False)
+    target_id = db.Column(db.Integer, nullable=False)
+    reason = db.Column(db.Text, nullable=False)
+    status = db.Column(db.String(20), default='pending')
+    resolved_by = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    resolution_note = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    resolved_at = db.Column(db.DateTime, nullable=True)
+
+    reporter = db.relationship('User', foreign_keys=[reporter_id], back_populates='reports_created')
+    resolver = db.relationship('User', foreign_keys=[resolved_by], back_populates='reports_resolved')
+
+    __table_args__ = (
+        CheckConstraint("status IN ('pending', 'reviewed', 'rejected', 'resolved')", name='check_report_status'),
     )
