@@ -90,13 +90,23 @@
                 <a href="/" class="text-xl font-bold text-gray-800 hover:text-indigo-600">QArticle</a>
             </div>
 
-            <!-- Поисковая строка (центр) -->
+            <!-- Поисковая строка (центр)
             <div class="flex-1 max-w-xl mx-4">
                 <div class="relative">
                     <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
                     <input type="text" placeholder="Поиск статей, вопросов, авторов..."
                            class="w-full pl-10 pr-4 py-2 rounded-full border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-400">
                 </div>
+            </div> -->
+            <!-- Поисковая строка -->
+            <div class="flex-1 max-w-xl mx-4">
+                <form action="{{ url_for('search') }}" method="GET">
+                    <div class="relative">
+                        <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                        <input type="text" name="q" placeholder="Поиск статей, вопросов, авторов..."
+                               class="w-full pl-10 pr-4 py-2 rounded-full border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                    </div>
+                </form>
             </div>
 
             <!-- Навигация пользователя -->

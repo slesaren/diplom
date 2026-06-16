@@ -41,6 +41,7 @@ from sqlalchemy.exc import OperationalError, TimeoutError, SQLAlchemyError
 import time
 from functools import wraps
 
+from searchservice import SearchService
 
 logging.basicConfig(
     level=logging.INFO,
@@ -1423,6 +1424,57 @@ def top_week():
                            top_tags=top_tags,
                            stats=stats)
 
+
+@app.route('/search')
+def search():
+    query = request.args.get('q', '').strip()
+    page = request.args.get('page', 1, type=int)
+
+    filters = {
+        'post_type': request.args.get('type'),
+        'tags': request.args.getlist('tags'),
+        'author': request.args.get('author'),
+        'group_id': request.args.get('group_id', type=int),
+        'sort_by': request.args.get('sort', 'relevance'),
+        'is_resolved': request.args.get('resolved') == 'true' if request.args.get('resolved') else None,
+    }
+
+    date_from = request.args.get('date_from')
+    date_to = request.args.get('date_to')
+    if date_from:
+        try:
+            filters['date_from'] = datetime.strptime(date_from, '%Y-%m-%d')
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            filters['date_to'] = datetime.strptime(date_to, '%Y-%m-%d')
+        except ValueError:
+            pass
+
+    results = SearchService.search_posts(query, filters, page)
+    popular_tags = SearchService.get_popular_searches()
+
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        suggestions = SearchService.get_search_suggestions(query)
+        return jsonify(suggestions)
+
+    return render_template('search.html',
+                           query=query,
+                           results=results,
+                           filters=filters,
+                           popular_tags=popular_tags,
+                           current_filters=filters)
+
+
+@app.template_filter('highlight')
+def highlight_filter(text, query):
+    if not query or not text:
+        return text
+
+    query = re.escape(query)
+    pattern = re.compile(f'({query})', re.IGNORECASE)
+    return pattern.sub(r'<mark class="bg-yellow-200">\1</mark>', text)
 
 @app.route('/admin')
 @login_required

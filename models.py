@@ -2,6 +2,7 @@ from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, timedelta
 from sqlalchemy import CheckConstraint, UniqueConstraint, func
 from flask_login import UserMixin
+from sqlalchemy.dialects.postgresql import TSVECTOR
 from werkzeug.security import generate_password_hash, check_password_hash
 
 db = SQLAlchemy()
@@ -228,6 +229,8 @@ class Post(db.Model):
     status = db.Column(db.String(20), default='published')
     rating = db.Column(db.Integer, default=0)
     view_count = db.Column(db.Integer, default=0)
+
+    search_vector = db.Column(TSVECTOR, nullable=True)
 
     comments = db.relationship('Comment', backref='post', lazy=True, cascade='all, delete-orphan')
     tags = db.relationship('PostTag', backref='post', lazy=True, cascade='all, delete-orphan')

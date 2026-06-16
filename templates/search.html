@@ -1,0 +1,384 @@
+{% extends "base.html" %}
+
+{% block title %}Поиск — QArticle{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto">
+    <!-- Поисковая строка -->
+    <div class="bg-white rounded-xl shadow-sm p-6 mb-6">
+        <form method="GET" action="{{ url_for('search') }}" id="searchForm">
+            <div class="relative">
+                <i class="fas fa-search absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                <input type="text" name="q" id="searchInput" value="{{ query }}"
+                       class="w-full pl-12 pr-24 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                       placeholder="Поиск статей, вопросов, авторов...">
+                <button type="submit" class="absolute right-2 top-1/2 transform -translate-y-1/2 bg-indigo-600 text-white px-4 py-1 rounded-lg hover:bg-indigo-700">
+                    Найти
+                </button>
+            </div>
+        </form>
+
+        <!-- Поисковые подсказки -->
+        <div id="suggestions" class="hidden absolute z-10 bg-white border rounded-lg shadow-lg mt-1 w-full max-w-3xl"></div>
+    </div>
+
+    <div class="flex flex-col lg:flex-row gap-6">
+        <!-- Фильтры (левая колонка) -->
+        <div class="lg:w-1/4">
+            <div class="bg-white rounded-xl shadow-sm p-4 sticky top-20">
+                <h3 class="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                    <i class="fas fa-filter"></i> Фильтры
+                </h3>
+
+                <form method="GET" action="{{ url_for('search') }}" id="filtersForm">
+                    <input type="hidden" name="q" value="{{ query }}">
+
+                    <!-- Тип поста -->
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Тип</label>
+                        <select name="type" class="w-full border rounded-lg px-3 py-2 text-sm">
+                            <option value="">Все</option>
+                            <option value="article" {% if current_filters.post_type == 'article' %}selected{% endif %}>Статьи</option>
+                            <option value="question" {% if current_filters.post_type == 'question' %}selected{% endif %}>Вопросы</option>
+                        </select>
+                    </div>
+
+                    <!-- Теги -->
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Теги</label>
+                        <div class="flex flex-wrap gap-1 mb-2">
+                            {% for tag in popular_tags[:10] %}
+                            <label class="inline-flex items-center">
+                                <input type="checkbox" name="tags" value="{{ tag }}"
+                                       {% if tag in current_filters.tags %}checked{% endif %}
+                                       class="mr-1" onchange="this.form.submit()">
+                                <span class="text-xs bg-gray-100 px-2 py-1 rounded-full">#{{ tag }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                        <input type="text" id="tagInput" placeholder="+ Добавить тег"
+                               class="w-full border rounded-lg px-3 py-1 text-sm mt-1">
+                    </div>
+
+                    <!-- Автор -->
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Автор</label>
+                        <input type="text" name="author" value="{{ current_filters.author or '' }}"
+                               class="w-full border rounded-lg px-3 py-2 text-sm"
+                               placeholder="Имя пользователя">
+                    </div>
+
+                    <!-- Период -->
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Период</label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="text-xs text-gray-500">От</label>
+                                <input type="date" name="date_from" value="{{ current_filters.date_from.strftime('%Y-%m-%d') if current_filters.date_from else '' }}"
+                                       class="w-full border rounded-lg px-3 py-1 text-sm">
+                            </div>
+                            <div>
+                                <label class="text-xs text-gray-500">До</label>
+                                <input type="date" name="date_to" value="{{ current_filters.date_to.strftime('%Y-%m-%d') if current_filters.date_to else '' }}"
+                                       class="w-full border rounded-lg px-3 py-1 text-sm">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Сортировка -->
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Сортировка</label>
+                        <select name="sort" class="w-full border rounded-lg px-3 py-2 text-sm" onchange="this.form.submit()">
+                            <option value="relevance" {% if current_filters.sort_by == 'relevance' %}selected{% endif %}>По релевантности</option>
+                            <option value="newest" {% if current_filters.sort_by == 'newest' %}selected{% endif %}>Сначала новые</option>
+                            <option value="oldest" {% if current_filters.sort_by == 'oldest' %}selected{% endif %}>Сначала старые</option>
+                            <option value="popular" {% if current_filters.sort_by == 'popular' %}selected{% endif %}>По популярности</option>
+                            <option value="most_commented" {% if current_filters.sort_by == 'most_commented' %}selected{% endif %}>По обсуждаемости</option>
+                        </select>
+                    </div>
+
+                    <!-- Только решённые вопросы -->
+                    {% if current_filters.post_type == 'question' %}
+                    <div class="mb-4">
+                        <label class="flex items-center">
+                            <input type="checkbox" name="resolved" value="true"
+                                   {% if current_filters.is_resolved %}checked{% endif %}
+                                   onchange="this.form.submit()">
+                            <span class="ml-2 text-sm text-gray-700">Только решённые вопросы</span>
+                        </label>
+                    </div>
+                    {% endif %}
+
+                    <div class="flex gap-2">
+                        <button type="submit" class="flex-1 bg-indigo-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-indigo-700">
+                            Применить
+                        </button>
+                        <a href="{{ url_for('search') }}" class="px-3 py-2 border rounded-lg text-sm hover:bg-gray-50">
+                            Сбросить
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Результаты поиска (правая колонка) -->
+        <div class="lg:w-3/4">
+            <!-- Информация о результатах -->
+            <div class="bg-white rounded-xl shadow-sm p-4 mb-4">
+                <div class="flex justify-between items-center">
+                    <div>
+                        {% if query %}
+                            <h2 class="text-lg font-semibold text-gray-800">
+                                Результаты поиска по запросу "{{ query }}"
+                            </h2>
+                            <p class="text-sm text-gray-500">Найдено: {{ results.total }} постов</p>
+                        {% else %}
+                            <h2 class="text-lg font-semibold text-gray-800">Все публикации</h2>
+                        {% endif %}
+                    </div>
+
+                    <!-- Активные фильтры -->
+                    {% if current_filters.tags or current_filters.author or current_filters.date_from or current_filters.date_to %}
+                    <div class="flex flex-wrap gap-1">
+                        {% if current_filters.tags %}
+                            {% for tag in current_filters.tags %}
+                            <span class="inline-flex items-center bg-indigo-100 text-indigo-700 px-2 py-1 rounded-full text-xs">
+                                #{{ tag }}
+                                <a href="#" onclick="removeTag('{{ tag }}')" class="ml-1 hover:text-indigo-900">&times;</a>
+                            </span>
+                            {% endfor %}
+                        {% endif %}
+                        {% if current_filters.author %}
+                            <span class="inline-flex items-center bg-indigo-100 text-indigo-700 px-2 py-1 rounded-full text-xs">
+                                Автор: {{ current_filters.author }}
+                                <a href="#" onclick="removeAuthor()" class="ml-1 hover:text-indigo-900">&times;</a>
+                            </span>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Список результатов -->
+            {% if results.items %}
+                <div class="space-y-4">
+                    {% for post in results.items %}
+                    <article class="bg-white rounded-xl shadow-sm p-5 hover:shadow-md transition">
+                        <div class="flex items-start justify-between">
+                            <div class="flex-1">
+                                <div class="flex items-center gap-2 mb-2">
+                                    <span class="text-xs px-2 py-1 rounded-full {% if post.type == 'article' %}bg-blue-100 text-blue-700{% else %}bg-green-100 text-green-700{% endif %}">
+                                        {{ 'Статья' if post.type == 'article' else 'Вопрос' }}
+                                    </span>
+                                    <span class="text-xs text-gray-400">
+                                        <i class="far fa-clock"></i> {{ post.created_at.strftime('%d.%m.%Y %H:%M') }}
+                                    </span>
+                                    {% if post.group %}
+                                    <span class="text-xs text-gray-400">
+                                        <i class="fas fa-users"></i> {{ post.group.name }}
+                                    </span>
+                                    {% endif %}
+                                    {% if post.type == 'question' and post.is_resolved %}
+                                    <span class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
+                                        <i class="fas fa-check-circle"></i> Решён
+                                    </span>
+                                    {% endif %}
+                                </div>
+
+                                <h2 class="text-xl font-bold mb-2">
+                                    <a href="{{ url_for('post_detail', post_id=post.id) }}" class="hover:text-indigo-600">
+                                        {{ post.title | highlight(query) if query else post.title }}
+                                    </a>
+                                </h2>
+
+                                <p class="text-gray-600 mb-3">
+                                    {{ post.content[:200] }}{% if post.content|length > 200 %}...{% endif %}
+                                </p>
+
+                                <div class="flex flex-wrap items-center justify-between">
+                                    <div class="flex items-center gap-4 text-sm text-gray-500">
+                                        <div class="flex items-center gap-1">
+                                            <img src="{{ post.author.avatar_url }}" class="w-5 h-5 rounded-full">
+                                            <a href="{{ url_for('user_profile', username=post.author.username) }}" class="hover:text-indigo-600">
+                                                {{ post.author.username }}
+                                            </a>
+                                        </div>
+                                        <div class="flex items-center gap-1">
+                                            <i class="far fa-thumbs-up"></i>
+                                            <span>{{ post.rating }}</span>
+                                        </div>
+                                        <div class="flex items-center gap-1">
+                                            <i class="far fa-comment"></i>
+                                            <span>{{ post.comments|length }}</span>
+                                        </div>
+                                        <div class="flex items-center gap-1">
+                                            <i class="far fa-eye"></i>
+                                            <span>{{ post.view_count }}</span>
+                                        </div>
+                                    </div>
+
+                                    <div class="flex flex-wrap gap-1">
+                                        {% for post_tag in post.tags[:3] %}
+                                        <a href="{{ url_for('search') }}?q=&tags={{ post_tag.tag.name }}"
+                                           class="text-xs bg-gray-100 hover:bg-indigo-100 text-gray-600 hover:text-indigo-600 px-2 py-1 rounded-full transition">
+                                            #{{ post_tag.tag.name }}
+                                        </a>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </article>
+                    {% endfor %}
+                </div>
+
+                <!-- Пагинация -->
+                {% if results.pages > 1 %}
+                <div class="flex justify-center mt-8">
+                    <nav class="inline-flex rounded-md shadow-sm">
+                        {% if results.has_prev %}
+                        <a href="{{ url_for('search', page=results.prev_num, q=query, **request.args) }}"
+                           class="px-3 py-2 border rounded-l-md bg-white text-gray-500 hover:bg-gray-50">
+                            <i class="fas fa-chevron-left"></i> Назад
+                        </a>
+                        {% endif %}
+
+                        {% for page_num in results.iter_pages(left_edge=2, left_current=2, right_current=2, right_edge=2) %}
+                            {% if page_num %}
+                                {% if page_num == results.page %}
+                                <span class="px-3 py-2 border-t border-b bg-indigo-600 text-white">{{ page_num }}</span>
+                                {% else %}
+                                <a href="{{ url_for('search', page=page_num, q=query, **request.args) }}"
+                                   class="px-3 py-2 border-t border-b bg-white text-gray-700 hover:bg-gray-50">
+                                    {{ page_num }}
+                                </a>
+                                {% endif %}
+                            {% else %}
+                                <span class="px-3 py-2 border-t border-b bg-white text-gray-500">...</span>
+                            {% endif %}
+                        {% endfor %}
+
+                        {% if results.has_next %}
+                        <a href="{{ url_for('search', page=results.next_num, q=query, **request.args) }}"
+                           class="px-3 py-2 border rounded-r-md bg-white text-gray-500 hover:bg-gray-50">
+                            Вперёд <i class="fas fa-chevron-right"></i>
+                        </a>
+                        {% endif %}
+                    </nav>
+                </div>
+                {% endif %}
+
+            {% else %}
+                <div class="bg-white rounded-xl shadow-sm p-12 text-center">
+                    <i class="fas fa-search text-gray-300 text-6xl mb-4"></i>
+                    <h3 class="text-xl font-semibold text-gray-700 mb-2">Ничего не найдено</h3>
+                    <p class="text-gray-500 mb-6">
+                        {% if query %}
+                            По запросу "{{ query }}" ничего не найдено. Попробуйте изменить запрос или фильтры.
+                        {% else %}
+                            Пока нет публикаций. Будьте первым, кто поделится знаниями!
+                        {% endif %}
+                    </p>
+                    {% if not query %}
+                    <a href="{{ url_for('create_post') }}" class="inline-block bg-indigo-600 text-white px-6 py-2 rounded-lg hover:bg-indigo-700">
+                        <i class="fas fa-plus mr-2"></i> Создать пост
+                    </a>
+                    {% endif %}
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+// Поисковые подсказки
+let searchTimeout;
+const searchInput = document.getElementById('searchInput');
+const suggestionsDiv = document.getElementById('suggestions');
+
+searchInput.addEventListener('input', function() {
+    clearTimeout(searchTimeout);
+    const query = this.value.trim();
+
+    if (query.length < 2) {
+        suggestionsDiv.classList.add('hidden');
+        return;
+    }
+
+    searchTimeout = setTimeout(async () => {
+        try {
+            const response = await fetch(`/search?q=${encodeURIComponent(query)}&X-Requested-With=XMLHttpRequest`);
+            const data = await response.json();
+
+            if (data.titles && data.titles.length > 0) {
+                suggestionsDiv.innerHTML = `
+                    <div class="p-2">
+                        <div class="text-xs text-gray-500 px-2 py-1">Заголовки</div>
+                        ${data.titles.map(title => `
+                            <a href="/search?q=${encodeURIComponent(title)}" class="block px-2 py-1 hover:bg-gray-100 rounded">${title}</a>
+                        `).join('')}
+                        ${data.tags && data.tags.length > 0 ? `
+                            <div class="text-xs text-gray-500 px-2 py-1 mt-2">Теги</div>
+                            ${data.tags.map(tag => `
+                                <a href="/search?q=&tags=${encodeURIComponent(tag)}" class="block px-2 py-1 hover:bg-gray-100 rounded">#${tag}</a>
+                            `).join('')}
+                        ` : ''}
+                    </div>
+                `;
+                suggestionsDiv.classList.remove('hidden');
+            } else {
+                suggestionsDiv.classList.add('hidden');
+            }
+        } catch (error) {
+            console.error('Error fetching suggestions:', error);
+        }
+    }, 300);
+});
+
+// Закрытие подсказок при клике вне
+document.addEventListener('click', function(e) {
+    if (!searchInput.contains(e.target) && !suggestionsDiv.contains(e.target)) {
+        suggestionsDiv.classList.add('hidden');
+    }
+});
+
+// Удаление фильтров
+function removeTag(tag) {
+    const form = document.getElementById('filtersForm');
+    const tagsInputs = form.querySelectorAll('input[name="tags"]');
+    tagsInputs.forEach(input => {
+        if (input.value === tag) {
+            input.remove();
+        }
+    });
+    form.submit();
+}
+
+function removeAuthor() {
+    const form = document.getElementById('filtersForm');
+    const authorInput = form.querySelector('input[name="author"]');
+    if (authorInput) {
+        authorInput.value = '';
+    }
+    form.submit();
+}
+
+// Добавление тега через поле ввода
+document.getElementById('tagInput')?.addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        const tag = this.value.trim();
+        if (tag) {
+            const form = document.getElementById('filtersForm');
+            const hiddenInput = document.createElement('input');
+            hiddenInput.type = 'hidden';
+            hiddenInput.name = 'tags';
+            hiddenInput.value = tag;
+            form.appendChild(hiddenInput);
+            this.value = '';
+            form.submit();
+        }
+    }
+});
+</script>
+{% endblock %}
