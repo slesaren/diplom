@@ -1,0 +1,287 @@
+{% extends "base.html" %}
+
+{% block title %}Уведомления — QArticle{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+        <!-- Заголовок -->
+        <div class="border-b border-gray-200 px-6 py-4 flex justify-between items-center">
+            <h1 class="text-xl font-bold text-gray-800">
+                <i class="fas fa-bell text-indigo-600"></i> Уведомления
+                <span class="text-sm font-normal text-gray-500 ml-2">
+                    ({{ notifications.total }})
+                </span>
+            </h1>
+            <div class="flex gap-2">
+                <button onclick="markAllRead()"
+                        class="text-sm text-indigo-600 hover:text-indigo-800 transition">
+                    <i class="fas fa-check-double"></i> Все прочитаны
+                </button>
+                <span class="text-gray-300">|</span>
+                <a href="#" onclick="return false;" class="text-sm text-gray-500 hover:text-gray-700 transition">
+                    <i class="fas fa-cog"></i> Настройки
+                </a>
+            </div>
+        </div>
+
+        <!-- Фильтры -->
+        <div class="border-b border-gray-200 px-6 py-3 flex flex-wrap gap-2">
+            <a href="{{ url_for('notifications') }}"
+               class="px-3 py-1 text-sm rounded-full transition
+                      {% if filter_type == 'all' %}bg-indigo-600 text-white{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %}">
+                Все
+            </a>
+            <a href="{{ url_for('notifications', type='comment') }}"
+               class="px-3 py-1 text-sm rounded-full transition
+                      {% if filter_type == 'comment' %}bg-indigo-600 text-white{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %}">
+                <i class="fas fa-comment"></i> Комментарии
+            </a>
+            <a href="{{ url_for('notifications', type='answer') }}"
+               class="px-3 py-1 text-sm rounded-full transition
+                      {% if filter_type == 'answer' %}bg-indigo-600 text-white{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %}">
+                <i class="fas fa-question-circle"></i> Ответы
+            </a>
+            <a href="{{ url_for('notifications', type='vote') }}"
+               class="px-3 py-1 text-sm rounded-full transition
+                      {% if filter_type == 'vote' %}bg-indigo-600 text-white{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %}">
+                <i class="fas fa-thumbs-up"></i> Голоса
+            </a>
+            <a href="{{ url_for('notifications', type='mention') }}"
+               class="px-3 py-1 text-sm rounded-full transition
+                      {% if filter_type == 'mention' %}bg-indigo-600 text-white{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %}">
+                <i class="fas fa-at"></i> Упоминания
+            </a>
+            <a href="{{ url_for('notifications', type='follow') }}"
+               class="px-3 py-1 text-sm rounded-full transition
+                      {% if filter_type == 'follow' %}bg-indigo-600 text-white{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %}">
+                <i class="fas fa-user-plus"></i> Подписки
+            </a>
+            <a href="{{ url_for('notifications', type='achievement') }}"
+               class="px-3 py-1 text-sm rounded-full transition
+                      {% if filter_type == 'achievement' %}bg-indigo-600 text-white{% else %}bg-gray-100 text-gray-700 hover:bg-gray-200{% endif %}">
+                <i class="fas fa-trophy"></i> Достижения
+            </a>
+        </div>
+
+        <!-- Список уведомлений -->
+        <div class="divide-y divide-gray-100" id="notificationsList">
+            {% if notifications.items %}
+                {% for notification in notifications.items %}
+                <div class="px-6 py-4 hover:bg-gray-50 transition notification-item {% if not notification.is_read %}bg-indigo-50{% endif %}"
+                     data-id="{{ notification.id }}">
+                    <div class="flex items-start gap-3">
+                        <!-- Иконка -->
+                        <div class="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center
+                                    {% if notification.type == 'comment' %}bg-blue-100 text-blue-600
+                                    {% elif notification.type == 'answer' %}bg-green-100 text-green-600
+                                    {% elif notification.type == 'vote' %}bg-yellow-100 text-yellow-600
+                                    {% elif notification.type == 'mention' %}bg-purple-100 text-purple-600
+                                    {% elif notification.type == 'follow' %}bg-pink-100 text-pink-600
+                                    {% elif notification.type == 'achievement' %}bg-amber-100 text-amber-600
+                                    {% elif notification.type == 'system' %}bg-gray-100 text-gray-600
+                                    {% elif notification.type == 'moderation' %}bg-red-100 text-red-600
+                                    {% else %}bg-gray-100 text-gray-600{% endif %}">
+                            <i class="fas
+                                {% if notification.type == 'comment' %}fa-comment
+                                {% elif notification.type == 'answer' %}fa-question-circle
+                                {% elif notification.type == 'vote' %}fa-thumbs-up
+                                {% elif notification.type == 'mention' %}fa-at
+                                {% elif notification.type == 'follow' %}fa-user-plus
+                                {% elif notification.type == 'achievement' %}fa-trophy
+                                {% elif notification.type == 'system' %}fa-bell
+                                {% elif notification.type == 'moderation' %}fa-gavel
+                                {% else %}fa-bell{% endif %}">
+                            </i>
+                        </div>
+
+                        <div class="flex-1 min-w-0">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-2">
+                                    <h3 class="font-semibold text-gray-800">
+                                        {% if notification.link %}
+                                        <a href="{{ notification.link }}" class="hover:text-indigo-600">
+                                            {{ notification.title }}
+                                        </a>
+                                        {% else %}
+                                        {{ notification.title }}
+                                        {% endif %}
+                                    </h3>
+                                    {% if not notification.is_read %}
+                                    <span class="inline-block w-2 h-2 bg-indigo-600 rounded-full"></span>
+                                    {% endif %}
+                                </div>
+                                <div class="flex items-center gap-2 flex-shrink-0">
+                                    <span class="text-xs text-gray-400">{{ notification.created_at.strftime('%H:%M, %d.%m.%Y') }}</span>
+                                    {% if not notification.is_read %}
+                                    <button onclick="markAsRead({{ notification.id }})"
+                                            class="text-xs text-indigo-600 hover:text-indigo-800">
+                                        Прочитано
+                                    </button>
+                                    {% endif %}
+                                    <button onclick="deleteNotification({{ notification.id }})"
+                                            class="text-xs text-gray-400 hover:text-red-600">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <p class="text-sm text-gray-600 mt-1">{{ notification.message }}</p>
+                            {% if notification.actor_username %}
+                            <p class="text-xs text-gray-400 mt-1">
+                                <i class="fas fa-user"></i> {{ notification.actor_username }}
+                            </p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+
+                <!-- Пагинация -->
+                {% if notifications.pages > 1 %}
+                <div class="px-6 py-4 flex justify-center">
+                    <nav class="inline-flex rounded-md shadow-sm">
+                        {% if notifications.has_prev %}
+                        <a href="{{ url_for('notifications', page=notifications.prev_num, type=filter_type) }}"
+                           class="px-3 py-2 border rounded-l-md bg-white text-gray-500 hover:bg-gray-50">
+                            <i class="fas fa-chevron-left"></i> Назад
+                        </a>
+                        {% endif %}
+
+                        {% for page_num in notifications.iter_pages(left_edge=2, left_current=2, right_current=2, right_edge=2) %}
+                            {% if page_num %}
+                                {% if page_num == notifications.page %}
+                                <span class="px-3 py-2 border-t border-b bg-indigo-600 text-white">{{ page_num }}</span>
+                                {% else %}
+                                <a href="{{ url_for('notifications', page=page_num, type=filter_type) }}"
+                                   class="px-3 py-2 border-t border-b bg-white text-gray-700 hover:bg-gray-50">
+                                    {{ page_num }}
+                                </a>
+                                {% endif %}
+                            {% else %}
+                                <span class="px-3 py-2 border-t border-b bg-white text-gray-500">...</span>
+                            {% endif %}
+                        {% endfor %}
+
+                        {% if notifications.has_next %}
+                        <a href="{{ url_for('notifications', page=notifications.next_num, type=filter_type) }}"
+                           class="px-3 py-2 border rounded-r-md bg-white text-gray-500 hover:bg-gray-50">
+                            Вперёд <i class="fas fa-chevron-right"></i>
+                        </a>
+                        {% endif %}
+                    </nav>
+                </div>
+                {% endif %}
+
+            {% else %}
+                <div class="py-12 text-center">
+                    <i class="fas fa-bell-slash text-gray-300 text-5xl mb-4"></i>
+                    <h3 class="text-lg font-semibold text-gray-700">Нет уведомлений</h3>
+                    <p class="text-gray-500 mt-1">У вас пока нет уведомлений</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+
+async function markAsRead(notificationId) {
+    try {
+        const response = await fetch(`/notifications/${notificationId}/read`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (response.ok) {
+            const item = document.querySelector(`.notification-item[data-id="${notificationId}"]`);
+            if (item) {
+                item.classList.remove('bg-indigo-50');
+                const unreadDot = item.querySelector('.w-2.h-2');
+                if (unreadDot) unreadDot.remove();
+                const readBtn = item.querySelector('button:first-of-type');
+                if (readBtn) readBtn.remove();
+                updateUnreadCount();
+            }
+        }
+    } catch (error) {
+        console.error('Error marking as read:', error);
+    }
+}
+
+
+async function markAllRead() {
+    if (!confirm('Отметить все уведомления как прочитанные?')) return;
+
+    try {
+        const response = await fetch('/notifications/read-all', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (response.ok) {
+            document.querySelectorAll('.notification-item').forEach(item => {
+                item.classList.remove('bg-indigo-50');
+                const dot = item.querySelector('.w-2.h-2');
+                if (dot) dot.remove();
+                const btn = item.querySelector('button:first-of-type');
+                if (btn && btn.textContent.trim() === 'Прочитано') btn.remove();
+            });
+            updateUnreadCount();
+            showToast('Все уведомления отмечены как прочитанные', 'success');
+        }
+    } catch (error) {
+        console.error('Error marking all as read:', error);
+    }
+}
+
+async function deleteNotification(notificationId) {
+    if (!confirm('Удалить это уведомление?')) return;
+
+    try {
+        const response = await fetch(`/notifications/${notificationId}/delete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (response.ok) {
+            const item = document.querySelector(`.notification-item[data-id="${notificationId}]`);
+            if (item) {
+                item.style.opacity = '0';
+                setTimeout(() => item.remove(), 300);
+                updateUnreadCount();
+            }
+        }
+    } catch (error) {
+        console.error('Error deleting notification:', error);
+    }
+}
+
+async function updateUnreadCount() {
+    try {
+        const response = await fetch('/notifications/unread');
+        const data = await response.json();
+        const counter = document.querySelector('.unread-counter');
+        if (counter) {
+            counter.textContent = data.count;
+            counter.style.display = data.count > 0 ? 'inline-block' : 'none';
+        }
+    } catch (error) {
+        console.error('Error updating unread count:', error);
+    }
+}
+
+function showToast(message, type) {
+    const toast = document.createElement('div');
+    toast.className = `fixed bottom-4 right-4 z-50 px-4 py-2 rounded-lg shadow-lg text-white transition-opacity duration-300 ${
+        type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : 'bg-blue-500'
+    }`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+</script>
+{% endblock %}

@@ -443,3 +443,74 @@ class Report(db.Model):
     __table_args__ = (
         CheckConstraint("status IN ('pending', 'reviewed', 'rejected', 'resolved')", name='check_report_status'),
     )
+
+
+class Notification(db.Model):
+    __tablename__ = 'notifications'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    type = db.Column(db.String(50), nullable=False)  # comment, answer, vote, mention, follow, system
+    title = db.Column(db.String(200), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    link = db.Column(db.String(500), nullable=True)
+    is_read = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    read_at = db.Column(db.DateTime, nullable=True)
+
+    target_type = db.Column(db.String(20), nullable=True)
+    target_id = db.Column(db.Integer, nullable=True)
+    actor_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
+    actor_username = db.Column(db.String(80), nullable=True)
+
+    user = db.relationship('User', foreign_keys=[user_id], backref='notifications')
+    actor = db.relationship('User', foreign_keys=[actor_id], backref='acted_notifications')
+
+    __table_args__ = (
+        CheckConstraint(
+            "type IN ('comment', 'answer', 'vote', 'mention', 'follow', 'system', 'moderation', 'achievement')",
+            name='check_notification_type'
+        ),
+    )
+
+    @classmethod
+    def create_notification(cls, user_id, type, title, message, link=None,
+                            target_type=None, target_id=None, actor_id=None):
+        notification = cls(
+            user_id=user_id,
+            type=type,
+            title=title,
+            message=message,
+            link=link,
+            target_type=target_type,
+            target_id=target_id,
+            actor_id=actor_id
+        )
+        if actor_id:
+            actor = db.session.get(User, actor_id)
+            if actor and not actor.is_deleted:
+                notification.actor_username = actor.username
+        db.session.add(notification)
+        db.session.commit()
+        return notification
+
+    def mark_as_read(self):
+        self.is_read = True
+        self.read_at = datetime.utcnow()
+        db.session.commit()
+
+    def mark_as_unread(self):
+        self.is_read = False
+        self.read_at = None
+        db.session.commit()
+
+    @classmethod
+    def mark_all_as_read(cls, user_id):
+        cls.query.filter_by(user_id=user_id, is_read=False).update(
+            {'is_read': True, 'read_at': datetime.utcnow()}
+        )
+        db.session.commit()
+
+    @classmethod
+    def get_unread_count(cls, user_id):
+        return cls.query.filter_by(user_id=user_id, is_read=False).count()

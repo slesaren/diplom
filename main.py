@@ -14,7 +14,7 @@ import os
 from flask_login import UserMixin, LoginManager, login_user, current_user, login_required, logout_user
 from config import Config
 from models import db, User, Post, Tag, PostTag, Comment, Vote, Group, UserGroup, Article, Question, Bookmark, \
-    Subscription, UserAchievement, Report, ModerationAction
+    Subscription, UserAchievement, Report, ModerationAction, Notification
 from redis_utils import RedisBookStats
 
 from flask_sqlalchemy import SQLAlchemy
@@ -113,6 +113,53 @@ def handle_db_timeout(e):
 def handle_sqlalchemy_error(e):
     logger.error(f"SQLAlchemy error: {str(e)}", exc_info=True)
     return render_template('error.html'), 500
+
+@app.context_processor
+def inject_user_data():
+    unread_count = 0
+    if current_user.is_authenticated:
+        try:
+            unread_count = Notification.get_unread_count(current_user.id)
+        except Exception as e:
+            logger.warning(f"Error getting unread count: {str(e)}")
+            unread_count = 0
+
+    return {
+        'unread_count': unread_count,
+    }
+
+
+@app.context_processor
+def utility_processor():
+    def get_error_title(status_code):
+        titles = {
+            404: 'Страница не найдена',
+            403: 'Доступ запрещён',
+            500: 'Ошибка сервера',
+            503: 'Сервис недоступен'
+        }
+        return titles.get(status_code, 'Ошибка')
+
+    def get_author_display(author):
+        if not author or author.is_deleted:
+            return {
+                'username': '[Удалённый пользователь]',
+                'avatar_url': '/static/default-avatar.png',
+                'reputation': 0,
+                'is_deleted': True
+            }
+        return {
+            'username': author.username,
+            'avatar_url': author.avatar_url,
+            'reputation': author.reputation,
+            'is_deleted': False
+        }
+
+    return {
+        'get_error_title': get_error_title,
+        'get_author_display': get_author_display,
+    }
+
 
 
 REPUTATION_RULES = {
@@ -571,39 +618,6 @@ def user_profile(username):
                            total_views=total_views,
                            is_subscribed=is_subscribed)
 
-
-@app.route('/subscribe_user/<int:user_id>', methods=['POST'])
-@login_required
-def subscribe_user(user_id):
-    target_user = db.session.get(User, user_id)
-    if not target_user:
-        return jsonify({'error': 'User not found'}), 404
-
-    if target_user.id == current_user.id:
-        return jsonify({'error': 'Cannot subscribe to yourself'}), 400
-
-    existing = Subscription.query.filter_by(
-        user_id=current_user.id,
-        target_type='author',
-        target_id=user_id
-    ).first()
-
-    if existing:
-        db.session.delete(existing)
-        subscribed = False
-    else:
-        subscription = Subscription(
-            user_id=current_user.id,
-            target_type='author',
-            target_id=user_id
-        )
-        db.session.add(subscription)
-        subscribed = True
-
-    db.session.commit()
-
-    return jsonify({'subscribed': subscribed})
-
 @app.route('/profile')
 @login_required
 def profile():
@@ -1047,6 +1061,27 @@ def add_comment(post_id):
     db.session.add(comment)
     db.session.commit()
 
+    if is_answer:
+        question = db.session.get(Question, post_id)
+        if question:
+            create_answer_notification(comment, question)
+    else:
+        create_comment_notification(comment, post)
+
+    if parent_id:
+        parent_comment = db.session.get(Comment, parent_id)
+        if parent_comment and parent_comment.author_id != current_user.id:
+            Notification.create_notification(
+                user_id=parent_comment.author_id,
+                type='comment',
+                title=f"Ответ на ваш комментарий",
+                message=f"{current_user.username} ответил на ваш комментарий в посте «{post.title}»",
+                link=url_for('post_detail', post_id=post.id, _external=True) + f"#comment-{comment.id}",
+                target_type='comment',
+                target_id=comment.id,
+                actor_id=current_user.id
+            )
+
     flash('Комментарий добавлен', 'success')
     return redirect(url_for('post_detail', post_id=post_id))
 
@@ -1155,6 +1190,15 @@ def vote():
 
                 if target.rating >= 100:
                     add_achievement(target.author_id, 'popular_article')
+
+                vote = Vote.query.filter_by(
+                    user_id=current_user.id,
+                    target_type=target_type,
+                    target_id=target_id
+                ).first()
+                if vote:
+                    create_vote_notification(vote, target)
+
             elif target_type == 'comment':
                 rep_change = REPUTATION_RULES['comment_upvote_received'] if value == 1 else REPUTATION_RULES[
                     'comment_downvote_received']
@@ -1325,7 +1369,38 @@ def subscribe():
 
     return jsonify({'subscribed': subscribed})
 
+@app.route('/subscribe_user/<int:user_id>', methods=['POST'])
+@login_required
+def subscribe_user(user_id):
+    target_user = db.session.get(User, user_id)
+    if not target_user:
+        return jsonify({'error': 'User not found'}), 404
 
+    if target_user.id == current_user.id:
+        return jsonify({'error': 'Cannot subscribe to yourself'}), 400
+
+    existing = Subscription.query.filter_by(
+        user_id=current_user.id,
+        target_type='author',
+        target_id=user_id
+    ).first()
+
+    if existing:
+        db.session.delete(existing)
+        subscribed = False
+    else:
+        subscription = Subscription(
+            user_id=current_user.id,
+            target_type='author',
+            target_id=user_id
+        )
+        db.session.add(subscription)
+        subscribed = True
+        create_follow_notification(current_user, target_user)
+
+    db.session.commit()
+
+    return jsonify({'subscribed': subscribed})
 
 @app.route('/post/<int:post_id>/delete', methods=['POST'])
 @login_required
@@ -1533,6 +1608,189 @@ def change_role():
 
     return jsonify({'success': True})
 
+
+def create_comment_notification(comment, post):
+    if comment.author_id == post.author_id:
+        return
+
+    Notification.create_notification(
+        user_id=post.author_id,
+        type='comment',
+        title=f"Новый комментарий к вашему посту",
+        message=f"{comment.author.username} оставил комментарий: {comment.content[:100]}...",
+        link=url_for('post_detail', post_id=post.id, _external=True) + f"#comment-{comment.id}",
+        target_type='post',
+        target_id=post.id,
+        actor_id=comment.author_id
+    )
+
+    mentions = extract_mentions(comment.content)
+    for mentioned_username in mentions:
+        if mentioned_username != comment.author.username:
+            mentioned_user = User.query.filter_by(username=mentioned_username).first()
+            if mentioned_user:
+                Notification.create_notification(
+                    user_id=mentioned_user.id,
+                    type='mention',
+                    title=f"Вас упомянули в комментарии",
+                    message=f"{comment.author.username} упомянул вас в комментарии к посту «{post.title}»",
+                    link=url_for('post_detail', post_id=post.id, _external=True) + f"#comment-{comment.id}",
+                    target_type='comment',
+                    target_id=comment.id,
+                    actor_id=comment.author_id
+                )
+
+
+def create_answer_notification(answer, question):
+    if answer.author_id == question.author_id:
+        return
+
+    Notification.create_notification(
+        user_id=question.author_id,
+        type='answer',
+        title=f"Новый ответ на ваш вопрос",
+        message=f"{answer.author.username} ответил на ваш вопрос «{question.title}»",
+        link=url_for('post_detail', post_id=question.id, _external=True) + f"#comment-{answer.id}",
+        target_type='question',
+        target_id=question.id,
+        actor_id=answer.author_id
+    )
+
+
+def create_vote_notification(vote, target):
+    if vote.user_id == target.author_id:
+        return
+
+    vote_text = "лайк" if vote.value == 1 else "дизлайк"
+    type_text = "статье" if target.type == 'article' else "вопросу" if target.type == 'question' else "комментарию"
+
+    Notification.create_notification(
+        user_id=target.author_id,
+        type='vote',
+        title=f"Новый {vote_text}",
+        message=f"{vote.user.username} поставил {vote_text} вашему {type_text}: «{target.title if hasattr(target, 'title') else target.content[:50]}»",
+        link=url_for('post_detail', post_id=target.id, _external=True) if hasattr(target, 'title') else None,
+        target_type='post' if hasattr(target, 'title') else 'comment',
+        target_id=target.id,
+        actor_id=vote.user_id
+    )
+
+
+def create_follow_notification(follower, target_user):
+    if follower.id == target_user.id:
+        return
+
+    Notification.create_notification(
+        user_id=target_user.id,
+        type='follow',
+        title=f"Новый подписчик",
+        message=f"{follower.username} подписался на вас",
+        link=url_for('user_profile', username=follower.username, _external=True),
+        target_type='user',
+        target_id=follower.id,
+        actor_id=follower.id
+    )
+
+
+def create_achievement_notification(user, achievement_type):
+    achievement_name = UserAchievement.ACHIEVEMENTS.get(achievement_type, achievement_type)
+
+    Notification.create_notification(
+        user_id=user.id,
+        type='achievement',
+        title=f"Новое достижение!",
+        message=f"Вы получили достижение «{achievement_name}»!",
+        link=url_for('profile', _external=True),
+        target_type='user',
+        target_id=user.id
+    )
+
+
+def create_system_notification(user_id, title, message, link=None):
+    Notification.create_notification(
+        user_id=user_id,
+        type='system',
+        title=title,
+        message=message,
+        link=link
+    )
+
+
+def extract_mentions(text):
+    pattern = r'@([a-zA-ZА-Яа-яЁё0-9_\-]+)'
+    return re.findall(pattern, text)
+
+
+@app.route('/notifications')
+@login_required
+def notifications():
+    page = request.args.get('page', 1, type=int)
+    filter_type = request.args.get('type', 'all')
+
+    query = Notification.query.filter_by(user_id=current_user.id)
+
+    if filter_type != 'all':
+        query = query.filter_by(type=filter_type)
+
+    notifications_list = query.order_by(Notification.created_at.desc()).paginate(
+        page=page, per_page=20, error_out=False
+    )
+
+    return render_template('notifications.html',
+                           notifications=notifications_list,
+                           filter_type=filter_type)
+
+
+@app.route('/notifications/unread')
+@login_required
+def get_unread_notifications():
+    unread_count = Notification.get_unread_count(current_user.id)
+    notifications_list = Notification.query.filter_by(
+        user_id=current_user.id,
+        is_read=False
+    ).order_by(Notification.created_at.desc()).limit(10).all()
+
+    return jsonify({
+        'count': unread_count,
+        'notifications': [{
+            'id': n.id,
+            'title': n.title,
+            'message': n.message,
+            'link': n.link,
+            'created_at': n.created_at.strftime('%H:%M, %d.%m.%Y'),
+            'type': n.type
+        } for n in notifications_list]
+    })
+
+
+@app.route('/notifications/<int:notification_id>/read', methods=['POST'])
+@login_required
+def mark_notification_read(notification_id):
+    notification = db.session.get(Notification, notification_id)
+    if not notification or notification.user_id != current_user.id:
+        return jsonify({'error': 'Not found'}), 404
+
+    notification.mark_as_read()
+    return jsonify({'success': True})
+
+
+@app.route('/notifications/read-all', methods=['POST'])
+@login_required
+def mark_all_notifications_read():
+    Notification.mark_all_as_read(current_user.id)
+    return jsonify({'success': True})
+
+
+@app.route('/notifications/<int:notification_id>/delete', methods=['POST'])
+@login_required
+def delete_notification(notification_id):
+    notification = db.session.get(Notification, notification_id)
+    if not notification or notification.user_id != current_user.id:
+        return jsonify({'error': 'Not found'}), 404
+
+    db.session.delete(notification)
+    db.session.commit()
+    return jsonify({'success': True})
 
 @app.route('/debug_session')
 @login_required
