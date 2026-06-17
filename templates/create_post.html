@@ -3,68 +3,68 @@
 {% block title %}Создать пост — QArticle{% endblock %}
 
 {% block extra_css %}
+{{ super() }}
+<link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
 <style>
-    .editor-toolbar {
-        border: 1px solid #e2e8f0;
-        border-bottom: none;
+    .ql-container {
+        min-height: 350px;
+        font-size: 16px;
+        border-radius: 0 0 0.5rem 0.5rem;
+    }
+    .ql-toolbar {
         border-radius: 0.5rem 0.5rem 0 0;
         background: #f8fafc;
-        padding: 0.5rem;
+        border-color: #e2e8f0;
     }
-    .editor-toolbar button {
-        padding: 0.25rem 0.5rem;
-        margin: 0 0.125rem;
-        border-radius: 0.25rem;
-        transition: all 0.2s;
+    .ql-editor {
+        min-height: 350px;
     }
-    .editor-toolbar button:hover {
-        background: #e2e8f0;
+    .ql-editor img {
+        max-width: 100%;
+        border-radius: 0.5rem;
     }
-    .editor-content {
+    .ql-editor pre.ql-syntax {
+        background: #1e293b;
+        color: #e2e8f0;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        overflow-x: auto;
+    }
+    .editor-container {
         border: 1px solid #e2e8f0;
-        border-radius: 0 0 0.5rem 0.5rem;
-        min-height: 300px;
-    }
-    .tag-input {
-        display: inline-flex;
-        align-items: center;
-        background: #e0e7ff;
-        color: #3730a3;
-        padding: 0.25rem 0.5rem;
-        border-radius: 9999px;
-        font-size: 0.875rem;
-        margin: 0.25rem;
-    }
-    .tag-input button {
-        margin-left: 0.5rem;
-        color: #6366f1;
-        cursor: pointer;
-    }
-    .tag-input button:hover {
-        color: #4f46e5;
-    }
-    .context-banner {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-    }
-    .selected-fragment {
-        background: #fef3c7;
-        border-left: 4px solid #f59e0b;
-        padding: 0.75rem;
         border-radius: 0.5rem;
-        font-family: monospace;
-        font-size: 0.875rem;
-        max-height: 150px;
-        overflow-y: auto;
+        overflow: hidden;
     }
-    .type-info {
-        background: #f3f4f6;
-        border-radius: 0.5rem;
-        padding: 0.75rem 1rem;
+    .editor-container .ql-toolbar {
+        border: none;
+        border-bottom: 1px solid #e2e8f0;
     }
-    .type-locked {
-        background: #fef3c7;
-        border-left: 4px solid #f59e0b;
+    .editor-container .ql-container {
+        border: none;
+    }
+    .editor-container:focus-within {
+        border-color: #4f46e5;
+        box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+    }
+    .image-upload-progress {
+        display: none;
+        margin: 0.5rem 0;
+    }
+    .image-upload-progress.active {
+        display: block;
+    }
+    .progress-bar {
+        height: 4px;
+        background: #e2e8f0;
+        border-radius: 2px;
+        overflow: hidden;
+        margin-top: 0.25rem;
+    }
+    .progress-bar .progress-fill {
+        height: 100%;
+        background: #4f46e5;
+        width: 0%;
+        transition: width 0.3s ease;
     }
 </style>
 {% endblock %}
@@ -93,56 +93,15 @@
             </p>
         </div>
 
-        <!-- Контекстная информация -->
-        {% if context_article or context_question or selected_fragment %}
-        <div class="context-banner p-4 text-sm">
-            {% if context_article %}
-            <div class="flex items-start gap-2">
-                <i class="fas fa-book mt-0.5"></i>
-                <div>
-                    <strong>Вы задаёте вопрос к статье:</strong>
-                    <a href="{{ url_for('post_detail', post_id=context_article.id) }}" class="underline hover:no-underline text-white/90">
-                        {{ context_article.title }}
-                    </a>
-                    {% if selected_fragment %}
-                    <div class="mt-2">
-                        <div class="text-xs opacity-80 mb-1">Выделенный фрагмент:</div>
-                        <div class="selected-fragment text-gray-800">
-                            «{{ selected_fragment[:300] }}{% if selected_fragment|length > 300 %}...{% endif %}»
-                        </div>
-                    </div>
-                    {% endif %}
-                </div>
-            </div>
-            {% elif context_question %}
-            <div class="flex items-start gap-2">
-                <i class="fas fa-question-circle mt-0.5"></i>
-                <div>
-                    <strong>Вы отвечаете на вопрос:</strong>
-                    <a href="{{ url_for('post_detail', post_id=context_question.id) }}" class="underline hover:no-underline text-white/90">
-                        {{ context_question.title }}
-                    </a>
-                    <div class="mt-1 text-xs opacity-80">
-                        {{ context_question.content[:200] }}{% if context_question.content|length > 200 %}...{% endif %}
-                    </div>
-                </div>
-            </div>
-            {% endif %}
-        </div>
-        {% endif %}
-
         <!-- Форма -->
         <form method="POST" action="{{ url_for('create_post') }}" class="p-6" id="createPostForm">
-
-            <!-- Тип поста - скрытое поле при контексте -->
+            <!-- Тип поста (скрытый при контексте) -->
             {% if context_article %}
-                <!-- Вопрос к статье-->
                 <input type="hidden" name="type" value="question">
                 <input type="hidden" name="article_context_id" value="{{ context_article.id }}">
                 {% if selected_fragment %}
                 <input type="hidden" name="fragment_ref" value="{{ selected_fragment[:100] }}">
                 {% endif %}
-
                 <div class="mb-6 type-info type-locked">
                     <div class="flex items-center gap-2">
                         <i class="fas fa-question-circle text-green-600 text-lg"></i>
@@ -155,11 +114,9 @@
                         </div>
                     </div>
                 </div>
-
             {% elif context_question %}
                 <input type="hidden" name="type" value="article">
                 <input type="hidden" name="source_question_id" value="{{ context_question.id }}">
-
                 <div class="mb-6 type-info type-locked">
                     <div class="flex items-center gap-2">
                         <i class="fas fa-newspaper text-blue-600 text-lg"></i>
@@ -172,9 +129,7 @@
                         </div>
                     </div>
                 </div>
-
             {% else %}
-                <!-- Свободный выбор типа -->
                 <div class="mb-6">
                     <label class="block text-sm font-medium text-gray-700 mb-2">Тип поста</label>
                     <div class="flex space-x-4">
@@ -229,38 +184,31 @@
                 <div class="text-xs text-gray-400 mt-1" id="titleCounter">0 / 200</div>
             </div>
 
+            <!-- Содержание - Quill -->
             <div class="mb-6">
                 <label class="block text-sm font-medium text-gray-700 mb-2">
                     <i class="fas fa-paragraph"></i> Содержание <span class="text-red-500">*</span>
                 </label>
 
-                <div class="editor-toolbar">
-                    <button type="button" onclick="formatText('bold')" title="Жирный">
-                        <i class="fas fa-bold"></i>
-                    </button>
-                    <button type="button" onclick="formatText('italic')" title="Курсив">
-                        <i class="fas fa-italic"></i>
-                    </button>
-                    <button type="button" onclick="formatText('underline')" title="Подчеркнутый">
-                        <i class="fas fa-underline"></i>
-                    </button>
-                    <button type="button" onclick="formatText('code')" title="Код">
-                        <i class="fas fa-code"></i>
-                    </button>
-                    <button type="button" onclick="insertLink()" title="Ссылка">
-                        <i class="fas fa-link"></i>
-                    </button>
-                    <button type="button" onclick="insertImage()" title="Изображение">
-                        <i class="fas fa-image"></i>
-                    </button>
-                    <button type="button" onclick="insertCodeBlock()" title="Блок кода">
-                        <i class="fas fa-code-branch"></i>
-                    </button>
+                <div class="editor-container">
+                    <!--  для сохранения содержимого -->
+                    <input type="hidden" name="content" id="content">
+
+                    <!-- Quill редактор -->
+                    <div id="editor">
+                        <p>Напишите содержание поста...</p>
+                    </div>
                 </div>
 
-                <textarea id="content" name="content" rows="15" required
-                          class="editor-content w-full px-3 py-2 border border-gray-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 font-mono"
-                          placeholder="Напишите содержание поста..."></textarea>
+                <!-- Прогресс загрузки изображений -->
+                <div id="imageUploadProgress" class="image-upload-progress mt-2">
+                    <p class="text-sm text-gray-600">
+                        <i class="fas fa-spinner fa-spin"></i> Загрузка изображения...
+                    </p>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                </div>
 
                 <div class="text-xs text-gray-400 mt-1" id="contentCounter">0 символов</div>
             </div>
@@ -306,29 +254,110 @@
             <i class="fas fa-lightbulb"></i> Советы по написанию качественного поста
         </h3>
         <div class="text-sm text-blue-700 space-y-1">
-            {% if context_question %}
-                <p>✓ <strong>Статья-ответ на вопрос:</strong> Опишите решение подробно, приведите примеры кода.</p>
-                <p>✓ Ссылайтесь на исходный вопрос и объясните, как ваша статья решает поставленную проблему.</p>
-                <p>✓ Добавьте релевантные теги для лучшего поиска.</p>
-            {% elif context_article %}
-                <p>✓ <strong>Вопрос о фрагменте статьи:</strong> Укажите конкретный фрагмент, который вызвал вопрос.</p>
-                <p>✓ Опишите, что именно вам непонятно или требует разъяснения.</p>
-                <p>✓ Будьте максимально конкретны, чтобы автор статьи мог дать точный ответ.</p>
-            {% else %}
-                <p>✓ <strong>Для статьи:</strong> Используйте заголовки, списки и примеры кода для лучшего восприятия.</p>
-                <p>✓ <strong>Для вопроса:</strong> Опишите проблему подробно, приложите код и сообщение об ошибке.</p>
-                <p>✓ Добавьте релевантные теги для привлечения аудитории.</p>
-                <p>✓ Проверьте орфографию перед публикацией.</p>
-            {% endif %}
+            <p>✓ Используйте <strong>жирный</strong> и <em>курсив</em> для выделения важных мыслей</p>
+            <p>✓ Добавляйте <strong>изображения</strong> для наглядности</p>
+            <p>✓ Используйте <strong>списки</strong> для структурирования информации</p>
+            <p>✓ Вставляйте <strong>код</strong> с подсветкой синтаксиса</p>
         </div>
     </div>
 </div>
 
+<script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
+
 <script>
-// Счетчики символов
+// ===== Инициализация Quill =====
+const toolbarOptions = [
+    [{ 'header': [1, 2, 3, 4, 5, 6, false] }],
+    [{ 'font': [] }],
+    [{ 'size': ['small', false, 'large', 'huge'] }],
+    ['bold', 'italic', 'underline', 'strike'],
+    [{ 'color': [] }, { 'background': [] }],
+    [{ 'script': 'sub' }, { 'script': 'super' }],
+    [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+    [{ 'indent': '-1'}, { 'indent': '+1' }],
+    [{ 'align': [] }],
+    ['blockquote', 'code-block'],
+    ['link', 'image', 'video'],
+    ['clean']
+];
+
+const quill = new Quill('#editor', {
+    theme: 'snow',
+    modules: {
+        toolbar: toolbarOptions,
+        clipboard: {
+            matchVisual: false
+        }
+    },
+    placeholder: 'Напишите содержание поста...',
+    formats: [
+        'header', 'font', 'size',
+        'bold', 'italic', 'underline', 'strike',
+        'color', 'background',
+        'script',
+        'list', 'bullet',
+        'indent',
+        'align',
+        'blockquote', 'code-block',
+        'link', 'image', 'video'
+    ]
+});
+
+// Загрузка изображений через API
+quill.getModule('toolbar').addHandler('image', function() {
+    const input = document.createElement('input');
+    input.setAttribute('type', 'file');
+    input.setAttribute('accept', 'image/*');
+    input.click();
+
+    input.onchange = async function() {
+        const file = this.files[0];
+        if (!file) return;
+
+        // Проверка размера файла (макс 5MB)
+        if (file.size > 5 * 1024 * 1024) {
+            alert('Размер изображения не должен превышать 5MB');
+            return;
+        }
+
+        //  прогресс
+        const progressContainer = document.getElementById('imageUploadProgress');
+        const progressFill = document.getElementById('progressFill');
+        progressContainer.classList.add('active');
+        progressFill.style.width = '0%';
+
+        try {
+            const formData = new FormData();
+            formData.append('image', file);
+
+            const response = await fetch('/upload_image', {
+                method: 'POST',
+                body: formData
+            });
+
+            progressFill.style.width = '100%';
+
+            const data = await response.json();
+
+            if (data.success) {
+                const range = quill.getSelection(true);
+                quill.insertEmbed(range.index, 'image', data.url);
+                quill.setSelection(range.index + 1);
+            } else {
+                alert(data.error || 'Ошибка загрузки изображения');
+            }
+        } catch (error) {
+            console.error('Error uploading image:', error);
+            alert('Ошибка загрузки изображения');
+        } finally {
+            progressContainer.classList.remove('active');
+            progressFill.style.width = '0%';
+        }
+    };
+});
+
 const titleInput = document.getElementById('title');
 const titleCounter = document.getElementById('titleCounter');
-const contentInput = document.getElementById('content');
 const contentCounter = document.getElementById('contentCounter');
 
 titleInput.addEventListener('input', function() {
@@ -341,93 +370,13 @@ titleInput.addEventListener('input', function() {
     }
 });
 
-contentInput.addEventListener('input', function() {
-    const count = this.value.length;
-    contentCounter.textContent = `${count} символов`;
+// Обновление счетчика символов при изменении содержимого
+quill.on('text-change', function() {
+    const text = quill.getText().trim();
+    const length = text.length;
+    contentCounter.textContent = `${length} символов`;
 });
 
-function togglePostType() {
-    const type = document.querySelector('input[name="type"]:checked').value;
-    const helpText = document.getElementById('typeHelp');
-
-    if (type === 'article') {
-        helpText.innerHTML = '<i class="fas fa-info-circle"></i> Статья — подробный материал с пояснениями. Вопрос — запрос помощи от сообщества.';
-        document.getElementById('title').placeholder = 'Например: Введение в машинное обучение';
-    } else {
-        helpText.innerHTML = '<i class="fas fa-info-circle"></i> Вопрос — запрос помощи от сообщества. Опишите проблему максимально подробно.';
-        document.getElementById('title').placeholder = 'Например: Как оптимизировать SQL запросы?';
-    }
-}
-
-// Форматирование текста
-function formatText(type) {
-    const textarea = document.getElementById('content');
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const selectedText = textarea.value.substring(start, end);
-    let formattedText = '';
-
-    switch(type) {
-        case 'bold':
-            formattedText = `**${selectedText}**`;
-            break;
-        case 'italic':
-            formattedText = `*${selectedText}*`;
-            break;
-        case 'underline':
-            formattedText = `<u>${selectedText}</u>`;
-            break;
-        case 'code':
-            formattedText = `\`${selectedText}\``;
-            break;
-        default:
-            return;
-    }
-
-    textarea.value = textarea.value.substring(0, start) + formattedText + textarea.value.substring(end);
-    textarea.focus();
-    textarea.setSelectionRange(start + formattedText.length, start + formattedText.length);
-}
-
-function insertLink() {
-    const url = prompt('Введите URL ссылки:', 'https://');
-    if (url) {
-        const textarea = document.getElementById('content');
-        const start = textarea.selectionStart;
-        const selectedText = textarea.value.substring(start, textarea.selectionEnd) || 'ссылка';
-        const linkText = `[${selectedText}](${url})`;
-
-        textarea.value = textarea.value.substring(0, start) + linkText + textarea.value.substring(textarea.selectionEnd);
-        textarea.focus();
-        textarea.setSelectionRange(start + linkText.length, start + linkText.length);
-    }
-}
-
-function insertImage() {
-    const url = prompt('Введите URL изображения:', 'https://');
-    if (url) {
-        const textarea = document.getElementById('content');
-        const start = textarea.selectionStart;
-        const imageText = `![alt text](${url})`;
-
-        textarea.value = textarea.value.substring(0, start) + imageText + textarea.value.substring(textarea.selectionEnd);
-        textarea.focus();
-        textarea.setSelectionRange(start + imageText.length, start + imageText.length);
-    }
-}
-
-function insertCodeBlock() {
-    const textarea = document.getElementById('content');
-    const start = textarea.selectionStart;
-    const selectedText = textarea.value.substring(start, textarea.selectionEnd) || 'code';
-    const codeBlock = `\`\`\`\n${selectedText}\n\`\`\``;
-
-    textarea.value = textarea.value.substring(0, start) + codeBlock + textarea.value.substring(textarea.selectionEnd);
-    textarea.focus();
-    textarea.setSelectionRange(start + codeBlock.length, start + codeBlock.length);
-}
-
-// Теги
 const tags = new Set();
 const tagsContainer = document.getElementById('tagsContainer');
 const tagInput = document.getElementById('tagInput');
@@ -452,13 +401,11 @@ function addTag() {
             tagInput.value = '';
             return;
         }
-
         if (!/^[a-zа-яё0-9_\-]+$/i.test(tag)) {
             alert('Тег может содержать только буквы, цифры, _ и -');
             tagInput.value = '';
             return;
         }
-
         tags.add(tag);
         updateTagsDisplay();
     }
@@ -483,14 +430,28 @@ function updateTagsDisplay() {
         `;
         tagsContainer.appendChild(tagElement);
     });
-
     tagsHidden.value = Array.from(tags).join(',');
+}
+
+function togglePostType() {
+    const type = document.querySelector('input[name="type"]:checked').value;
+    const helpText = document.getElementById('typeHelp');
+    if (type === 'article') {
+        helpText.innerHTML = '<i class="fas fa-info-circle"></i> Статья — подробный материал с пояснениями. Вопрос — запрос помощи от сообщества.';
+        document.getElementById('title').placeholder = 'Например: Введение в машинное обучение';
+    } else {
+        helpText.innerHTML = '<i class="fas fa-info-circle"></i> Вопрос — запрос помощи от сообщества. Опишите проблему максимально подробно.';
+        document.getElementById('title').placeholder = 'Например: Как оптимизировать SQL запросы?';
+    }
 }
 
 // Валидация перед отправкой
 document.getElementById('createPostForm').addEventListener('submit', function(e) {
     const title = document.getElementById('title').value.trim();
-    const content = document.getElementById('content').value.trim();
+    const content = quill.getText().trim();
+
+    // Сохраняем HTML содержимое в скрытое поле
+    document.getElementById('content').value = quill.root.innerHTML;
 
     if (!title) {
         e.preventDefault();
@@ -518,5 +479,40 @@ document.getElementById('createPostForm').addEventListener('submit', function(e)
 
     return true;
 });
+
+
+// Если форма была отправлена с ошибкой, восстанавливаем содержимое
+{% if post_content %}
+document.addEventListener('DOMContentLoaded', function() {
+    quill.root.innerHTML = {{ post_content|tojson }};
+});
+{% endif %}
 </script>
+
+<style>
+.tag-input {
+    display: inline-flex;
+    align-items: center;
+    background: #e0e7ff;
+    color: #3730a3;
+    padding: 0.25rem 0.5rem;
+    border-radius: 9999px;
+    font-size: 0.875rem;
+    margin: 0.25rem;
+}
+.tag-input button {
+    margin-left: 0.5rem;
+    color: #6366f1;
+    cursor: pointer;
+}
+.tag-input button:hover {
+    color: #4f46e5;
+}
+.type-locked {
+    background: #fef3c7;
+    border-left: 4px solid #f59e0b;
+    padding: 0.75rem 1rem;
+    border-radius: 0.5rem;
+}
+</style>
 {% endblock %}

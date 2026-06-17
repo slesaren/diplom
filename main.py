@@ -43,6 +43,8 @@ from functools import wraps
 from searchservice import SearchService
 from flask import g
 from typing import List
+from werkzeug.utils import secure_filename
+import uuid
 
 logging.basicConfig(
     level=logging.INFO,
@@ -66,6 +68,58 @@ login_manager.login_message = 'Пожалуйста, войдите для до�
 login_manager.login_message_category = 'info'
 
 serializer = URLSafeTimedSerializer(app.config['SECRET_KEY'])
+
+UPLOAD_FOLDER = 'static/uploads'
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'}
+MAX_CONTENT_LENGTH = 5 * 1024 * 1024  # 5MB
+
+# Создаем папку если её нет
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+@app.route('/upload_image', methods=['POST'])
+@login_required
+def upload_image():
+    """Загрузка изображений для Quill редактора"""
+    if 'image' not in request.files:
+        return jsonify({'error': 'No image uploaded'}), 400
+
+    file = request.files['image']
+    if file.filename == '':
+        return jsonify({'error': 'No file selected'}), 400
+
+    if not allowed_file(file.filename):
+        return jsonify({'error': 'File type not allowed'}), 400
+
+    # Проверка размера
+    file.seek(0, 2)
+    size = file.tell()
+    file.seek(0)
+    if size > MAX_CONTENT_LENGTH:
+        return jsonify({'error': 'File too large (max 5MB)'}), 400
+
+    try:
+        # Генерируем уникальное имя
+        ext = file.filename.rsplit('.', 1)[1].lower()
+        filename = f"{uuid.uuid4().hex}.{ext}"
+        filepath = os.path.join(UPLOAD_FOLDER, filename)
+
+        # Сохраняем файл
+        file.save(filepath)
+
+        # Возвращаем URL
+        url = f"/{UPLOAD_FOLDER}/{filename}"
+        return jsonify({'success': True, 'url': url})
+
+    except Exception as e:
+        logger.error(f"Error uploading image: {str(e)}")
+        return jsonify({'error': 'Failed to upload image'}), 500
+
+
 
 def render_markdown(text):
     if not text:
@@ -1011,8 +1065,6 @@ def post_detail(post_id):
         if post.status != 'published':
             if not current_user.is_authenticated or post.author_id != current_user.id:
                 abort(403)
-
-
 
     #post.view_count += 1
     #db.session.commit()
