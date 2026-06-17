@@ -15,7 +15,7 @@ from flask_login import UserMixin, LoginManager, login_user, current_user, login
 from config import Config
 from models import db, User, Post, Tag, PostTag, Comment, Vote, Group, UserGroup, Article, Question, Bookmark, \
     Subscription, UserAchievement, Report, ModerationAction, Notification
-from redis_utils import RedisBookStats
+from redis_utils import RedisBookStats, redis_client
 
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import CheckConstraint, UniqueConstraint, func
@@ -40,8 +40,9 @@ from werkzeug.exceptions import NotFound
 from sqlalchemy.exc import OperationalError, TimeoutError, SQLAlchemyError
 import time
 from functools import wraps
-
 from searchservice import SearchService
+from flask import g
+from typing import List
 
 logging.basicConfig(
     level=logging.INFO,
@@ -160,7 +161,147 @@ def utility_processor():
         'get_author_display': get_author_display,
     }
 
+@app.errorhandler(Exception)
+def handle_all_exceptions(e):
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return jsonify({'error': str(e)}), 500
+    return render_template('error.html'), 500
 
+def cache_response(prefix: str = "view", expire: int = 300):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+
+            if request.method != 'GET' or request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return func(*args, **kwargs)
+
+            cache_key = f"{prefix}:{request.path}"
+            if request.args:
+                if len(request.args) > 5:
+                    return func(*args, **kwargs)
+                cache_key += ":" + "&".join(f"{k}={v}" for k, v in sorted(request.args.items()))
+
+            cached = redis_client.get(cache_key)
+            if cached is not None:
+                try:
+                    return cached
+                except Exception:
+                    pass
+
+            response = func(*args, **kwargs)
+            if response and hasattr(response, 'get_data'):
+                try:
+                    if response.status_code == 200:
+                        response_data = response.get_data(as_text=True)
+                        redis_client.set(cache_key, response_data, expire)
+                except Exception as e:
+                    pass
+
+            return response
+        return wrapper
+    return decorator
+
+@app.cli.command("clear-cache")
+def clear_cache():
+    from redis_utils import redis_client
+
+    if not redis_client.available:
+        print(" Redis недоступен")
+        return
+
+    try:
+        redis_client._client.flushdb()
+        print(" Весь кэш очищен")
+    except Exception as e:
+        print(f" Ошибка очистки кэша: {str(e)}")
+
+
+@app.cli.command("redis-status")
+def redis_status():
+    from redis_utils import redis_client
+
+    print(f"Redis доступен: {redis_client.available}")
+    if redis_client.available:
+        try:
+            info = redis_client._client.info()
+            print(f"  Версия: {info.get('redis_version')}")
+            print(f"  Ключей в БД: {redis_client._client.dbsize()}")
+            print(f"  Uptime: {info.get('uptime_in_seconds')} сек")
+        except Exception as e:
+            print(f"  Ошибка получения информации: {str(e)}")
+
+@app.before_request
+def before_request():
+    pass
+
+def get_comments_with_cache(post_id: int, force_refresh: bool = False):
+    if not force_refresh:
+        cache_key = f"comments_tree:{post_id}"
+        cached = redis_client.get(cache_key)
+        if cached:
+            try:
+                comment_ids = json.loads(cached)
+                if comment_ids:
+                    comments = Comment.query.filter(Comment.id.in_(comment_ids)).all()
+                    comments.sort(key=lambda c: c.created_at)
+
+                    comment_map = {c.id: c for c in comments}
+                    root_comments = []
+                    for comment in comments:
+                        if comment.parent_comment_id is None:
+                            root_comments.append(comment)
+                        else:
+                            parent = comment_map.get(comment.parent_comment_id)
+                            if parent:
+                                if not hasattr(parent, '_replies_cache'):
+                                    parent._replies_cache = []
+                                parent._replies_cache.append(comment)
+
+                    for comment in root_comments:
+                        if hasattr(comment, '_replies_cache'):
+                            comment.replies = comment._replies_cache
+
+                    return root_comments
+            except Exception as e:
+                logger.warning(f"Error loading cached comments: {str(e)}")
+
+    root_comments = Comment.query.filter_by(
+        post_id=post_id,
+        parent_comment_id=None
+    ).order_by(Comment.created_at).all()
+
+    if root_comments:
+        comment_ids = [c.id for c in root_comments]
+        all_replies = Comment.query.filter(
+            Comment.post_id == post_id,
+            Comment.parent_comment_id.in_(comment_ids)
+        ).order_by(Comment.created_at).all()
+
+        reply_map = {}
+        for reply in all_replies:
+            if reply.parent_comment_id not in reply_map:
+                reply_map[reply.parent_comment_id] = []
+            reply_map[reply.parent_comment_id].append(reply)
+
+        for comment in root_comments:
+            comment.replies = reply_map.get(comment.id, [])
+
+        try:
+            all_comment_ids = []
+            for c in root_comments:
+                all_comment_ids.append(c.id)
+                for reply in getattr(c, 'replies', []):
+                    all_comment_ids.append(reply.id)
+
+            redis_client.set(
+                f"comments_tree:{post_id}",
+                json.dumps(all_comment_ids),
+                Config.COMMENTS_CACHE_TTL
+            )
+        except Exception:
+            pass
+
+    return root_comments
 
 REPUTATION_RULES = {
     'post_created': 5,  # Создание поста
@@ -697,6 +838,20 @@ def index():
     page = request.args.get('page', 1, type=int)
     filter_type = request.args.get('filter', 'all')
 
+    cache_key_posts = f"index_posts:page{page}:filter{filter_type}"
+    cached_posts_data = redis_client.get(cache_key_posts)
+
+    if cached_posts_data and page == 1:
+        try:
+            data = json.loads(cached_posts_data)
+            posts_paginated = data.get('posts')
+            if posts_paginated:
+                #  реконструкция
+                pass
+        except Exception as e:
+            logger.warning(f"Error loading cached index: {str(e)}")
+
+
     query = Post.query.filter_by(status='published')
 
     if filter_type == 'article':
@@ -706,9 +861,39 @@ def index():
 
     posts = query.order_by(Post.created_at.desc()).paginate(page=page, per_page=10)
     groups = Group.query.limit(5).all()
-    popular_tags = db.session.query(Tag).join(PostTag).group_by(Tag.id).order_by(
-        func.count(PostTag.post_id).desc()).limit(10).all()
-    top_users = User.query.order_by(User.reputation.desc()).limit(5).all()
+
+    '''popular_tags = db.session.query(Tag).join(PostTag).group_by(Tag.id).order_by(
+        func.count(PostTag.post_id).desc()).limit(10).all()'''
+    popular_tags_cache_key = "popular_tags"
+    popular_tags = redis_client.get(popular_tags_cache_key)
+    if popular_tags is None:
+        popular_tags = db.session.query(Tag).join(PostTag).group_by(Tag.id).order_by(
+            func.count(PostTag.post_id).desc()).limit(10).all()
+        if popular_tags:
+            tag_ids = [t.id for t in popular_tags]
+            redis_client.set(popular_tags_cache_key, json.dumps(tag_ids), Config.POPULAR_CACHE_TTL)
+    else:
+        try:
+            tag_ids = json.loads(popular_tags)
+            popular_tags = Tag.query.filter(Tag.id.in_(tag_ids)).all()
+        except Exception:
+            popular_tags = db.session.query(Tag).join(PostTag).group_by(Tag.id).order_by(
+                func.count(PostTag.post_id).desc()).limit(10).all()
+
+    top_users_cache_key = "top_users"
+    top_users = redis_client.get(top_users_cache_key)
+    if top_users is None:
+        top_users = User.query.order_by(User.reputation.desc()).limit(5).all()
+        if top_users:
+            user_ids = [u.id for u in top_users]
+            redis_client.set(top_users_cache_key, json.dumps(user_ids), Config.POPULAR_CACHE_TTL)
+    else:
+        try:
+            user_ids = json.loads(top_users)
+            top_users = User.query.filter(User.id.in_(user_ids)).order_by(User.reputation.desc()).all()
+        except Exception:
+            top_users = User.query.order_by(User.reputation.desc()).limit(5).all()
+
     bookmarked_post_ids = []
     if current_user.is_authenticated:
         bookmarked_post_ids = [b.post_id for b in Bookmark.query.filter_by(user_id=current_user.id).all()]
@@ -807,16 +992,62 @@ def create_group():
 
 @app.route('/post/<int:post_id>')
 def post_detail(post_id):
-    post = db.session.get(Post, post_id)
-    if not post:
-        abort(404)
-    if post.status != 'published':
-        # Для черновиков только автор может видеть
-        if not current_user.is_authenticated or post.author_id != current_user.id:
-            abort(403)
+    cache_key = f"post_detail:{post_id}"
+    cached_data = redis_client.get(cache_key)
 
-    post.view_count += 1
-    db.session.commit()
+    post = None
+    if cached_data:
+        try:
+            data = json.loads(cached_data)
+            if data.get('view_count_cache'):
+                pass
+        except Exception:
+            cached_data = None
+
+    if not cached_data:
+        post = db.session.get(Post, post_id)
+        if not post:
+            abort(404)
+        if post.status != 'published':
+            if not current_user.is_authenticated or post.author_id != current_user.id:
+                abort(403)
+
+
+
+    #post.view_count += 1
+    #db.session.commit()
+    # Инкрементируем просмотры через Redis
+    views = RedisBookStats.increment_view(post_id)
+
+    try:
+        cache_data = {
+            'id': post.id,
+            'title': post.title,
+            'content': post.content,
+            'type': post.type,
+            'created_at': post.created_at.isoformat(),
+            'updated_at': post.updated_at.isoformat() if post.updated_at else None,
+            'author_id': post.author_id,
+            'author_username': post.author.username if post.author else None,
+            'author_avatar': post.author.avatar_url if post.author else None,
+            'author_reputation': post.author.reputation if post.author else 0,
+            'group_id': post.group_id,
+            'group_name': post.group.name if post.group else None,
+            'rating': post.rating,
+            'view_count': post.view_count + views,
+            'status': post.status,
+            'view_count_cache': True
+        }
+        redis_client.set(cache_key, json.dumps(cache_data, ensure_ascii=False), Config.POST_DETAIL_CACHE_TTL)
+    except Exception as e:
+        logger.warning(f"Error caching post {post_id}: {str(e)}")
+
+
+    if post is None:
+        post = db.session.get(Post, post_id)
+        if not post:
+            abort(404)
+
 
     comments = Comment.query.filter_by(post_id=post_id, parent_comment_id=None).order_by(Comment.created_at).all()
 
@@ -1028,11 +1259,19 @@ def edit_post(post_id):
         post.content = request.form.get('content', '').strip()
         post.updated_at = datetime.utcnow()
         db.session.commit()
+        invalidate_post_cache(post_id)
         flash('Пост обновлен', 'success')
         return redirect(url_for('post_detail', post_id=post.id))
 
     return render_template('edit_post.html', post=post)
 
+def invalidate_post_cache(post_id: int):
+    RedisBookStats.invalidate_post(post_id)
+    redis_client.delete_pattern(f"index*")
+    redis_client.delete_pattern(f"top_week*")
+    redis_client.delete_pattern(f"search:*")
+    redis_client.delete_pattern(f"tag_posts:*")
+    logger.info(f"Cache invalidated for post {post_id}")
 
 @app.route('/post/<int:post_id>/comment', methods=['POST'])
 @login_required
@@ -1099,7 +1338,7 @@ def edit_comment(comment_id):
             return redirect(url_for('edit_comment', comment_id=comment_id))
 
         comment.content = new_content
-        comment.updated_at = datetime.utcnow()  # если добавите поле updated_at в модель
+        comment.updated_at = datetime.utcnow()
         db.session.commit()
         flash('Комментарий обновлён', 'success')
         return redirect(url_for('post_detail', post_id=comment.post_id))
@@ -1131,11 +1370,17 @@ def vote():
     if target_type not in ['post', 'comment'] or value not in [-1, 0, 1]:
         return jsonify({'error': 'Invalid request'}), 400
 
-    if target_type == 'post':
+    '''if target_type == 'post':
         target = db.session.get(Post, target_id)
     else:
-        target = db.session.get(Comment, target_id)
-
+        target = db.session.get(Comment, target_id)'''
+    if target_type == 'post':
+        invalidate_post_cache(target_id)
+        target = db.session.get(Post, target_id)
+    else:
+        comment = db.session.get(Comment, target_id)
+        if comment:
+            invalidate_post_cache(comment.post_id)
     if not target:
         return jsonify({'error': 'Target not found'}), 404
 
@@ -1300,9 +1545,9 @@ def toggle_bookmark(post_id):
 
     db.session.commit()
 
+    redis_client.delete_pattern(f"bookmarks:{current_user.id}")
+    redis_client.delete_pattern(f"index*")
     return jsonify({'bookmarked': bookmarked})
-
-
 
 
 @app.route('/bookmarks')
@@ -1412,6 +1657,8 @@ def delete_post(post_id):
     db.session.delete(post)
     db.session.commit()
 
+    invalidate_post_cache(post_id)
+
     return jsonify({'success': True})
 
 
@@ -1435,9 +1682,22 @@ def accept_answer(answer_id):
 
 @app.route('/top')
 def top_week():
+    cache_key = "top_week_data"
+    cached_data = redis_client.get(cache_key)
+
+    if cached_data:
+        try:
+            data = json.loads(cached_data)
+            if data.get('generated_at'):
+                generated_at = datetime.fromisoformat(data['generated_at'])
+                if (datetime.utcnow() - generated_at).total_seconds() < Config.TOP_WEEK_CACHE_TTL:
+                    return render_template('top_week.html', **data['template_data'])
+        except Exception as e:
+            logger.warning(f"Error loading cached top week: {str(e)}")
+
+
     week_ago = datetime.utcnow() - timedelta(days=7)
 
-     # по лайкам
     top_posts = Post.query.filter(
         Post.status == 'published',
         Post.created_at >= week_ago
@@ -1459,7 +1719,6 @@ def top_week():
         func.count(Comment.id).desc()
     ).limit(10).all()
 
-    #  Топ пользователей по репутации за неделю, нужна история репутации, но пока используем общую репутацию
     top_users = User.query.filter(
         User.is_active == True,
         User.reputation > 0
@@ -1490,20 +1749,58 @@ def top_week():
         ).count()
     }
 
-    return render_template('top_week.html',
+    template_data = {
+        'top_posts': top_posts,
+        'top_viewed_posts': top_viewed_posts,
+        'top_commented_posts': top_commented_posts,
+        'top_users': top_users,
+        'new_users': new_users,
+        'top_tags': top_tags,
+        'stats': stats
+    }
+
+    try:
+        cache_data = {
+            'generated_at': datetime.utcnow().isoformat(),
+            'template_data': template_data
+        }
+        redis_client.set(cache_key, json.dumps(cache_data, default=str, ensure_ascii=False), Config.TOP_WEEK_CACHE_TTL)
+    except Exception as e:
+        logger.warning(f"Error caching top week: {str(e)}")
+
+    return render_template('top_week.html', **template_data)
+
+
+
+    '''return render_template('top_week.html',
                            top_posts=top_posts,
                            top_viewed_posts=top_viewed_posts,
                            top_commented_posts=top_commented_posts,
                            top_users=top_users,
                            new_users=new_users,
                            top_tags=top_tags,
-                           stats=stats)
+                           stats=stats)'''
 
 
 @app.route('/search')
 def search():
     query = request.args.get('q', '').strip()
     page = request.args.get('page', 1, type=int)
+    if query:
+        cache_key = f"search:{query}:page{page}"
+        for param in ['type', 'author', 'sort', 'resolved']:
+            value = request.args.get(param)
+            if value:
+                cache_key += f":{param}={value}"
+
+        if page == 1:
+            cached = redis_client.get(cache_key)
+            if cached:
+                try:
+                    data = json.loads(cached)
+                    pass
+                except Exception:
+                    pass
 
     filters = {
         'post_type': request.args.get('type'),
@@ -1533,6 +1830,13 @@ def search():
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         suggestions = SearchService.get_search_suggestions(query)
         return jsonify(suggestions)
+
+    if query and page == 1 and results and hasattr(results, 'items'):
+        try:
+            result_ids = [p.id for p in results.items]
+            redis_client.set(cache_key, json.dumps(result_ids), Config.SEARCH_CACHE_TTL)
+        except Exception as e:
+            logger.warning(f"Error caching search results: {str(e)}")
 
     return render_template('search.html',
                            query=query,

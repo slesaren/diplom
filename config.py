@@ -14,16 +14,22 @@ class Config:
     POSTS_PER_PAGE = 20
     COMMENTS_PER_PAGE = 50
 
+    REDIS_ENABLED = os.environ.get('REDIS_ENABLED', 'true').lower() == 'true'
     REDIS_HOST = os.environ.get('REDIS_HOST', 'localhost')
     REDIS_PORT = int(os.environ.get('REDIS_PORT', 6379))
     REDIS_DB = int(os.environ.get('REDIS_DB', 0))
     REDIS_PASSWORD = os.environ.get('REDIS_PASSWORD', None)
-    REDIS_SOCKET_TIMEOUT = int(os.environ.get('REDIS_SOCKET_TIMEOUT', 5))
+    REDIS_SOCKET_TIMEOUT = int(os.environ.get('REDIS_SOCKET_TIMEOUT', 2))
 
     RATING_CACHE_TTL = 3600
     VIEWS_CACHE_TTL = 86400
     POPULAR_CACHE_TTL = 300
-
+    FEED_CACHE_TTL = 180
+    POST_DETAIL_CACHE_TTL = 600
+    COMMENTS_CACHE_TTL = 300
+    USER_PROFILE_CACHE_TTL = 600
+    SEARCH_CACHE_TTL = 120
+    TOP_WEEK_CACHE_TTL = 1800
 
 
 class EmailProvider(Enum):

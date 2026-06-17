@@ -1,6 +1,7 @@
+from flask import json
 from models import db, User, Post, Tag, PostTag, Comment, Vote, Group, UserGroup, Article, Question, Bookmark, \
     Subscription, UserAchievement, Report, ModerationAction
-from redis_utils import RedisBookStats
+from redis_utils import logger, redis_client
 
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import CheckConstraint, UniqueConstraint, func
@@ -13,6 +14,32 @@ from sqlalchemy.dialects.postgresql import TSVECTOR, TSQUERY
 class SearchService:
     @staticmethod
     def search_posts(query, filters=None, page=1, per_page=20):
+        if query and query.strip() and page == 1 and not filters.get('sort_by'):
+            cache_key = f"search_query:{query}:simple"
+            cached_result_ids = redis_client.get(cache_key)
+            if cached_result_ids:
+                try:
+                    post_ids = json.loads(cached_result_ids)
+                    posts = Post.query.filter(Post.id.in_(post_ids)).all()
+
+                    class Paginator:
+                        def __init__(self, items, total):
+                            self.items = items
+                            self.total = total
+                            self.page = 1
+                            self.pages = 1
+                            self.has_prev = False
+                            self.has_next = False
+                            self.prev_num = None
+                            self.next_num = None
+
+                        def iter_pages(self, *args, **kwargs):
+                            return [1]
+
+                    return Paginator(posts, len(posts))
+                except Exception as e:
+                    logger.warning(f"Error loading cached search: {str(e)}")
+
         if filters is None:
             filters = {}
         search_query = Post.query.filter(Post.status == 'published')
@@ -63,13 +90,28 @@ class SearchService:
         elif sort_by == 'relevance' and (not query or not query.strip()):
             search_query = search_query.order_by(Post.created_at.desc())
 
-        return search_query.paginate(page=page, per_page=per_page, error_out=False)
+        result = search_query.paginate(page=page, per_page=per_page, error_out=False)
+
+        if query and query.strip() and page == 1 and not filters.get('sort_by'):
+            try:
+                if result and hasattr(result, 'items'):
+                    post_ids = [p.id for p in result.items]
+                    if post_ids:
+                        redis_client.set(
+                            f"search_query:{query}:simple",
+                            json.dumps(post_ids),
+                            120  # 2 мин
+                        )
+            except Exception as e:
+                logger.warning(f"Error caching search: {str(e)}")
+
+        return result
 
     @staticmethod
     def get_search_suggestions(query, limit=5):
         if not query or len(query) < 2:
-            return []
-# zagolovki
+            return {'titles': [], 'tags': []}
+
         suggestions = db.session.query(
             Post.title,
             func.similarity(Post.title, query).label('similarity')
@@ -101,7 +143,6 @@ class SearchService:
         ).limit(limit).all()
 
         return [tag_name for tag_name, count in popular_tags]
-
 
 
 
