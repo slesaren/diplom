@@ -6,6 +6,7 @@ services:
     startCommand: gunicorn main:app
     envVars:
       - key: DATABASE_URL
+        value: postgresql://qarticle_user:xuWZpQ2vPaqxOEsR2VP74fpPsCoGQOV5@dpg-d8pqqlpkh4rs739h0q8g-a/qarticle
         fromDatabase:
           name: qarticle_db
           property: connectionString
