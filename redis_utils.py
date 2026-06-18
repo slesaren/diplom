@@ -7,6 +7,7 @@ from functools import wraps
 import time
 import threading
 from config import Config
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -100,11 +101,32 @@ class RedisClient:
         return cls._instance
 
     def __init__(self):
-        if hasattr(self, '_initialized'):
-            return
-        self._initialized = True
-        self._connect()
-        logger.info(f"Redis client initialized. Available: {self._available}")
+        redis_url = os.environ.get('REDIS_URL')
+
+        if redis_url:
+            # Для Render — используем полный URL
+            self._client = redis.Redis.from_url(
+                redis_url,
+                socket_timeout=Config.REDIS_SOCKET_TIMEOUT,
+                decode_responses=True
+            )
+        else:
+            # Локальный режим
+            self._client = redis.Redis(
+                host=Config.REDIS_HOST,
+                port=Config.REDIS_PORT,
+                db=Config.REDIS_DB,
+                password=Config.REDIS_PASSWORD,
+                socket_timeout=Config.REDIS_SOCKET_TIMEOUT,
+                decode_responses=True
+            )
+
+        try:
+            self._client.ping()
+            self._available = True
+        except:
+            self._available = False
+            print(" Redis недоступен, используем memory cache")
 
     def _connect(self):
         try:

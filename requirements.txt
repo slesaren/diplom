@@ -1,8 +1,13 @@
---trusted-host pypi.org
---trusted-host files.pythonhosted.org
 Flask==2.3.3
 Flask-SQLAlchemy==3.0.5
+Flask-Login==0.6.2
+Flask-Migrate==4.0.4
 psycopg2-binary==2.9.9
-pymongo==4.5.0
 redis==4.6.0
+gunicorn==21.2.0
 python-dotenv==1.0.0
+itsdangerous==2.1.2
+markdown==3.4.1
+email-validator==2.0.0
+SQLAlchemy==2.0.19
+Flask-Migrate==4.0.4

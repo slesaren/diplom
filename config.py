@@ -4,7 +4,6 @@ from enum import Enum
 
 load_dotenv()
 
-
 class Config:
     SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or \
                               'postgresql://postgres:marslon@localhost:5432/qarticle?client_encoding=utf8'
@@ -15,10 +14,21 @@ class Config:
     COMMENTS_PER_PAGE = 50
 
     REDIS_ENABLED = os.environ.get('REDIS_ENABLED', 'true').lower() == 'true'
-    REDIS_HOST = os.environ.get('REDIS_HOST', 'localhost')
-    REDIS_PORT = int(os.environ.get('REDIS_PORT', 6379))
-    REDIS_DB = int(os.environ.get('REDIS_DB', 0))
-    REDIS_PASSWORD = os.environ.get('REDIS_PASSWORD', None)
+    REDIS_URL = os.environ.get('REDIS_URL', None)
+
+    if REDIS_URL:
+        import urlparse
+        parsed = urlparse.urlparse(REDIS_URL)
+        REDIS_HOST = parsed.hostname
+        REDIS_PORT = parsed.port
+        REDIS_PASSWORD = parsed.password
+        REDIS_DB = 0
+    else:
+        REDIS_HOST = os.environ.get('REDIS_HOST', 'localhost')
+        REDIS_PORT = int(os.environ.get('REDIS_PORT', 6379))
+        REDIS_DB = int(os.environ.get('REDIS_DB', 0))
+        REDIS_PASSWORD = os.environ.get('REDIS_PASSWORD', None)
+
     REDIS_SOCKET_TIMEOUT = int(os.environ.get('REDIS_SOCKET_TIMEOUT', 2))
 
     RATING_CACHE_TTL = 3600
