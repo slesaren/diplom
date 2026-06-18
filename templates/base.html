@@ -238,79 +238,13 @@
     <!--  ОСНОВНОЙ КОНТЕНТ -->
     <main class="container mx-auto px-4 py-6">
         <div class="flex flex-col lg:flex-row gap-6">
-            <!-- ЛЕВАЯ САЙДБАР (группы, теги, рекомендации)
-            <aside class="lg:w-1/4 space-y-6">
 
-                <div class="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
-                    <h3 class="font-semibold text-gray-800 flex items-center gap-2 mb-3">
-                        <i class="fas fa-users text-indigo-500"></i> Мои группы
-                    </h3>
-                    <ul class="space-y-2 text-sm">
-                        <li><a href="/group/python-data" class="flex justify-between hover:text-indigo-600"><span> Python для Data Science</span><span class="text-gray-400">12 нов.</span></a></li>
-                        <li><a href="/group/frontend" class="flex justify-between hover:text-indigo-600"><span> Frontend Craft</span><span class="text-gray-400">4 нов.</span></a></li>
-                        <li><a href="/group/devops" class="flex justify-between hover:text-indigo-600"><span> DevOps & Cloud</span><span class="text-gray-400">2 нов.</span></a></li>
-                    </ul>
-                    <a href="/groups/explore" class="text-indigo-500 text-xs mt-2 inline-block">+ Исследовать сообщества</a>
-                </div>
-
-                <div class="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
-                    <h3 class="font-semibold text-gray-800 flex items-center gap-2 mb-3">
-                        <i class="fas fa-tags text-indigo-500"></i> Трендовые теги
-                    </h3>
-                    <div class="flex flex-wrap gap-2">
-                        <a href="#" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded-full text-xs">#машинное_обучение</a>
-                        <a href="#" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded-full text-xs">#pandas</a>
-                        <a href="#" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded-full text-xs">#sql</a>
-                        <a href="#" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded-full text-xs">#docker</a>
-                        <a href="#" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded-full text-xs">#react</a>
-                    </div>
-                </div>
-
-                <div class="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
-                    <h3 class="font-semibold text-gray-800 flex items-center gap-2 mb-2">
-                        <i class="fas fa-archive text-indigo-500"></i> Из архивов
-                    </h3>
-                    <a href="#" class="block text-sm text-indigo-700 hover:underline">Почему B-деревья оптимальны для СУБД?</a>
-                    <p class="text-xs text-gray-400 mt-1"> 245 • 2 года назад</p>
-                </div>
-            </aside> -->
-
-            <!-- ЦЕНТРАЛЬНЫЙ КОНТЕНТ (то, что будет переопределяться) -->
-            <div class="lg:w-2/3">
+            <!-- ЦЕНТРАЛЬНЫЙ КОНТЕНТ  -->
+            <div class="lg:w-5/6">
                 {% block content %}
                 <!-- Содержимое страницы ...-->
                 {% endblock %}
             </div>
-
-            <!-- ПРАВАЯ САЙДБАР (уведомления, топ пользователей)
-            <aside class="lg:w-1/4 space-y-6">
-                <div class="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
-                    <h3 class="font-semibold text-gray-800 flex items-center gap-2 mb-3">
-                        <i class="fas fa-bell text-indigo-500"></i> Активность
-                    </h3>
-                    <div class="space-y-3 text-sm">
-                        <div class="flex gap-2">
-                            <img src="https://randomuser.me/api/portraits/women/68.jpg" class="w-6 h-6 rounded-full">
-                            <div><a href="#" class="font-medium">anna_ml</a> ответила на ваш вопрос о регуляризации</div>
-                        </div>
-                        <div class="flex gap-2">
-                            <i class="fas fa-comment-dots text-indigo-400"></i>
-                            <div><a href="#" class="font-medium">Статья «Индексы в PostgreSQL»</a> получила 5 новых комментариев</div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="bg-white rounded-xl shadow-sm p-4 border border-gray-100">
-                    <h3 class="font-semibold text-gray-800 flex items-center gap-2 mb-2">
-                        <i class="fas fa-trophy text-yellow-500"></i> Лучшие в Python DS
-                    </h3>
-                    <ul class="text-sm space-y-1">
-                        <li>1. <span class="font-medium">ivan_ds</span> — 1245 реп.</li>
-                        <li>2. <span class="font-medium">data_olga</span> — 980 реп.</li>
-                        <li>3. <span class="font-medium">alex_ml</span> — 742 реп.</li>
-                    </ul>
-                </div>
-            </aside>  -->
         </div>
     </main>
 
